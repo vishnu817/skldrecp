@@ -79,9 +79,11 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
 /* Receipt canvas */
 #rcap{text-align:center;padding:0 14px 14px;}
 @media print{
+  /* Print handled via popup window - this is fallback only */
   *{visibility:hidden!important;}
   #parea,#parea *{visibility:visible!important;}
-  #parea{position:fixed!important;top:0!important;left:0!important;margin:0!important;}
+  #parea{position:fixed!important;top:0;left:0;margin:0;padding:0;width:80mm!important;}
+  #parea img{display:block!important;width:80mm!important;height:auto!important;}
   @page{size:80mm auto;margin:0;}
 }
 </style>
@@ -148,10 +150,10 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
   <div class="mbox">
     <div class="mhandle"></div>
     <div style="font-weight:800;font-size:17px;margin-bottom:4px;">📤 Share Receipt</div>
-    <div style="font-size:13px;color:#888;margin-bottom:14px;">Receipt image ready to share</div>
+    <div style="font-size:13px;color:#888;margin-bottom:14px;">Tap Share to send via WhatsApp, Telegram, Email or any app</div>
     <div id="rcap"></div>
     <div style="display:flex;flex-direction:column;gap:10px;">
-      <button class="btn b-wa" id="wabtn" onclick="doShare()">💬 Share via WhatsApp</button>
+      <button class="btn b-wa" id="wabtn" onclick="doShare()">📤 Share Receipt (WhatsApp / Any App)</button>
       <button class="btn b-dark" id="dlbtn" onclick="doDownload()">💾 Save Image to Phone</button>
       <button class="btn b-gray" onclick="closeShare()">✕ Close</button>
     </div>
@@ -294,7 +296,7 @@ function drawBCctx(ctx, text, x, y, w, h) {
 
 // ═══════════════════════ DRAW RECEIPT ON CANVAS ══════════════════════════
 function makeReceiptCanvas(r, forPrint) {
-  var DPR = forPrint ? 2 : Math.min(window.devicePixelRatio||1,2);
+  var DPR = forPrint ? 1 : Math.min(window.devicePixelRatio||1,2);
   var W = 340;
   var hasRem = r.remarks && r.remarks.trim();
   var H = 88+112+36+72+72+52+44+(hasRem?30:0)+74+114;
@@ -656,10 +658,10 @@ function bookingHTML() {
     h += '<span style="font-size:12px;color:#888;">' + fmtDT(new Date(SAVED.dateTime)) + '</span></div>';
     h += '<div id="rcv-wrap" style="overflow-x:auto;text-align:center;"></div></div>';
     h += '<div style="display:flex;flex-direction:column;gap:10px;margin-bottom:14px;">';
-    h += '<button class="btn b-wa" onclick="openShare()">📲 Share Receipt Image</button>';
+    h += '<button class="btn b-wa" onclick="openShare()">📲 Share Receipt Image (WhatsApp / Any App)</button>';
     h += '<button class="btn b-dark" onclick="doPrint()">🖨 Print Receipt</button>';
     if (SAVED.senderPhone && SAVED.senderPhone.trim().length >= 10) {
-      h += '<button class="btn" style="background:#075e54;color:#fff;" onclick="waSender()">💬 Send Booking Confirmation to Sender</button>';
+      h += '<button class="btn" style="background:#075e54;color:#fff;" onclick="waSender()">💬 Send Booking Confirmation to Sender (' + SAVED.senderPhone + ')</button>';
     }
     h += '</div>';
   }
@@ -680,57 +682,57 @@ function doSave() {
 function doClear() { freshForm(); SAVED = null; renderBooking(); }
 function doPrint() {
   if (!SAVED) return;
-  var pa = document.getElementById("parea");
-  pa.innerHTML = ""; pa.style.display = "block";
-  var c = makeReceiptCanvas(SAVED, true); c.style.width = "80mm";
-  pa.appendChild(c);
-  setTimeout(function(){ window.print(); setTimeout(function(){ pa.style.display="none"; pa.innerHTML=""; }, 800); }, 900);
+
+  var c = makeReceiptCanvas(SAVED, true);
+  var dataURL = c.toDataURL("image/png");
+
+  var hasRem = SAVED.remarks && SAVED.remarks.trim();
+  var logH = 88+112+36+72+72+52+44+(hasRem?30:0)+74+114;
+  var hMM = Math.round(logH / 340 * 80);
+
+  // Build a self-contained print page and write it to a new window
+  var html = [
+    "<!DOCTYPE html><html><head><meta charset='UTF-8'>",
+    "<style>",
+    "*{margin:0;padding:0;}",
+    "body{width:80mm;background:#fff;}",
+    "img{width:80mm;height:auto;display:block;}",
+    "@page{size:80mm " + hMM + "mm;margin:0;}",
+    "</style></head><body>",
+    "<img src='" + dataURL + "' onload='window.print();'/>",
+    "</body></html>"
+  ].join("");
+
+  var win = window.open("", "_blank", "width=320,height=700");
+  if (!win) { toast("Allow popups for printing"); return; }
+  win.document.open();
+  win.document.write(html);
+  win.document.close();
 }
+
 
 function waSender() {
   if (!SAVED || !SAVED.senderPhone) return;
-  var phone = SAVED.senderPhone.replace(/\D/g,"");
+  var r = SAVED;
+  var phone = r.senderPhone.replace(/\D/g,"");
   if (phone.length === 10) phone = "91" + phone;
-
-  var btn = document.querySelector('[onclick="waSender()"]');
-  if (btn) btn.textContent = "⏳ Generating image…";
-
-  // Draw receipt canvas fresh
-  var c = makeReceiptCanvas(SAVED, false);
-
-  // Wait for QR / images to load then share
-  setTimeout(function(){
-    c.toBlob(function(blob){
-      if (btn) btn.textContent = "💬 Send to Sender on WhatsApp";
-      var file = new File([blob], "SKL_" + SAVED.awb + ".png", { type:"image/png" });
-
-      // Try Web Share API (Android Chrome) — shares image + opens WA
-      if (navigator.share && navigator.canShare && navigator.canShare({ files:[file] })) {
-        navigator.share({
-          title: "SK Logistics Receipt – " + SAVED.awb,
-          text: "Your booking is confirmed. AWB: " + SAVED.awb + "\nFrom: SK Logistics, Hyderabad",
-          files: [file]
-        }).catch(function(){ fallbackSenderShare(c, phone); });
-      } else {
-        fallbackSenderShare(c, phone);
-      }
-    }, "image/png");
-  }, 900);
+  var msg =
+    "Dear *" + (r.senderName||"Customer") + "*, your shipment has been booked via *SK Logistics, Hyderabad*." +
+    "\n\n" +
+    "\uD83D\uDCE6 *AWB:* " + r.awb + "\n" +
+    "\uD83D\uDE9A *Courier:* " + r.courier + " (" + r.mode + ")\n" +
+    "\uD83D\uDCCD *From:* Hyderabad \u2013 500064\n" +
+    "\uD83D\uDCCD *To:* " + r.destCity + (r.destPin ? " \u2013 " + r.destPin : "") + "\n" +
+    "\uD83D\uDC64 *Receiver:* " + (r.receiverName||"\u2014") + (r.receiverPhone ? " | " + r.receiverPhone : "") + "\n" +
+    "\u2696\uFE0F *Weight:* " + r.weight + " kg | *Pieces:* " + r.pieces + "\n" +
+    "\uD83D\uDCCB *Contents:* " + r.contents + "\n" +
+    "\uD83D\uDCB3 *Charges:* \u20B9" + (r.charges||"0") + " (" + r.payment + ")" +
+    (r.remarks ? "\n\uD83D\uDCDD *Remarks:* " + r.remarks : "") +
+    "\n\n\u26A0\uFE0F _No gold/silver/cash accepted. Max liability \u20B91,500 (docs)/\u20B92,500 (non-docs)._" +
+    "\n\n_SK Logistics | \u260E 8919855159 | 8886507472_";
+  window.open("https://wa.me/" + phone + "?text=" + encodeURIComponent(msg), "_blank");
 }
 
-function fallbackSenderShare(canvas, phone) {
-  // Download image then open WA chat with sender number
-  var a = document.createElement("a");
-  a.href = canvas.toDataURL("image/png");
-  a.download = "SKL_Receipt_" + SAVED.awb + ".png";
-  a.click();
-  toast("Image saved! Opening sender's WhatsApp chat…", 3500);
-  setTimeout(function(){
-    window.open("https://wa.me/" + phone + "?text=" + encodeURIComponent(
-      "Dear " + (SAVED.senderName||"Customer") + ", your shipment (AWB: " + SAVED.awb + ") has been booked via SK Logistics. Please find the receipt image above."
-    ), "_blank");
-  }, 1500);
-}
 
 // ═══════════════════════ SHARE ════════════════════════════════════════════
 function openShare() {
@@ -746,24 +748,33 @@ function closeShare() { document.getElementById("sharemb").classList.remove("ope
 function getCanvas(cb) { setTimeout(function(){ if(SHARE_CANVAS) cb(SHARE_CANVAS); }, 900); }
 
 function doShare() {
-  var btn = document.getElementById("wabtn"); btn.textContent = "⏳ Preparing…";
+  var btn = document.getElementById("wabtn");
+  btn.textContent = "⏳ Generating image…"; btn.disabled = true;
   getCanvas(function(c){
-    btn.textContent = "💬 Share via WhatsApp";
+    btn.textContent = "📤 Share Receipt"; btn.disabled = false;
     c.toBlob(function(blob){
-      var file = new File([blob], "SKL_" + SAVED.awb + ".png", { type:"image/png" });
+      var file = new File([blob], "SKL_Receipt_" + SAVED.awb + ".png", { type:"image/png" });
+      // Try native share sheet first — lets user pick WhatsApp, Telegram, Email, etc.
       if (navigator.share && navigator.canShare && navigator.canShare({ files:[file] })) {
-        navigator.share({ title:"SK Logistics Receipt", text:"AWB: "+SAVED.awb, files:[file] })
-          .then(function(){ closeShare(); })
-          .catch(function(){ dlAndOpenWA(c); });
-      } else { dlAndOpenWA(c); }
+        navigator.share({
+          title: "SK Logistics Receipt",
+          text: "Courier Receipt – AWB: " + SAVED.awb + " | SK Logistics, Hyderabad",
+          files: [file]
+        }).then(function(){ closeShare(); })
+          .catch(function(err){ if(err.name !== "AbortError") fallbackDownload(c); });
+      } else {
+        // Fallback: download image
+        fallbackDownload(c);
+      }
     }, "image/png");
   });
 }
-function dlAndOpenWA(c) {
-  var a = document.createElement("a"); a.href = c.toDataURL("image/png");
-  a.download = "SKL_Receipt_" + SAVED.awb + ".png"; a.click();
-  toast("Image saved! Opening WhatsApp…", 3000);
-  setTimeout(function(){ window.open("https://wa.me/","_blank"); }, 1200);
+function fallbackDownload(c) {
+  var a = document.createElement("a");
+  a.href = c.toDataURL("image/png");
+  a.download = "SKL_Receipt_" + SAVED.awb + ".png";
+  a.click();
+  toast("✅ Image saved to phone! Now share from your gallery.", 4000);
 }
 function doDownload() {
   var btn = document.getElementById("dlbtn"); btn.textContent = "⏳ Saving…";
