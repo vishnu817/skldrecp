@@ -673,10 +673,23 @@ function bookingHTML() {
 function doSave() {
   if (!F.awb.trim()) { toast("⚠️ Please enter AWB number"); return; }
   if (!F.destCity.trim()) { toast("⚠️ Please enter destination city"); return; }
-  var r = Object.assign({}, F, { dateTime: new Date().toISOString(), id: Date.now() });
-  HIST.unshift(r); SAVED = r; AF = {};
-  saveHist(); renderBooking(); updBadge();
-  toast("✅ Receipt saved!");
+  if (_editingId) {
+    // Update existing record
+    var idx = HIST.findIndex(function(x){ return x.id===_editingId; });
+    if (idx !== -1) {
+      HIST[idx] = Object.assign({}, F, { id: _editingId, dateTime: HIST[idx].dateTime });
+      SAVED = HIST[idx];
+    }
+    _editingId = null;
+    saveHist(); AF = {}; renderBooking(); updBadge();
+    toast("✅ Receipt updated!");
+  } else {
+    // New record
+    var r = Object.assign({}, F, { dateTime: new Date().toISOString(), id: Date.now() });
+    HIST.unshift(r); SAVED = r; AF = {};
+    saveHist(); renderBooking(); updBadge();
+    toast("✅ Receipt saved!");
+  }
   setTimeout(function(){ window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" }); }, 100);
 }
 function doClear() { freshForm(); SAVED = null; renderBooking(); }
@@ -1012,17 +1025,68 @@ function filterHist(q) {
 function histRows(list) {
   if (!list.length) return '<div style="text-align:center;padding:30px;color:#aaa;">No results</div>';
   return list.map(function(r){
-    return '<div class="hi"><div style="display:flex;justify-content:space-between;margin-bottom:6px;"><div style="font-weight:800;color:#CC0000;font-size:15px;">' + esc(r.awb) + '</div><div style="font-size:18px;font-weight:800;color:#CC0000;">₹' + (r.charges||"0") + '</div></div>' +
-    '<div style="font-size:12px;color:#888;margin-bottom:8px;">' + fmtDT(new Date(r.dateTime)) + '</div>' +
-    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;font-size:13px;margin-bottom:10px;">' +
-    '<div><span style="color:#888;">To:</span> <b>' + esc(r.destCity||"—") + (r.destPin ? " – " + r.destPin : "") + '</b></div>' +
-    '<div><span style="color:#888;">Via:</span> <b>' + esc(r.courier) + '</b></div>' +
-    '<div><span style="color:#888;">Receiver:</span> ' + esc(r.receiverName||"—") + '</div>' +
-    '<div><span style="color:#888;">Pay:</span> ' + esc(r.payment) + '</div></div>' +
-    '<button class="btn b-red" style="padding:11px;font-size:14px;" onclick="reprnt(' + JSON.stringify(r) + ')">📄 View &amp; Share</button></div>';
+    var rid = r.id;
+    return '<div class="hi">' +
+      '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px;">' +
+        '<div style="font-weight:800;color:#CC0000;font-size:15px;">' + esc(r.awb) + '</div>' +
+        '<div style="font-size:17px;font-weight:800;color:#CC0000;">&#8377;' + (r.charges||"0") + '</div>' +
+      '</div>' +
+      '<div style="font-size:12px;color:#888;margin-bottom:8px;">' + fmtDT(new Date(r.dateTime)) + '</div>' +
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;font-size:13px;margin-bottom:12px;">' +
+        '<div><span style="color:#888;">To:</span> <b>' + esc(r.destCity||"—") + (r.destPin?" – "+r.destPin:"") + '</b></div>' +
+        '<div><span style="color:#888;">Via:</span> <b>' + esc(r.courier) + '</b></div>' +
+        '<div><span style="color:#888;">Receiver:</span> ' + esc(r.receiverName||"—") + '</div>' +
+        '<div><span style="color:#888;">Pay:</span> ' + esc(r.payment) + '</div>' +
+      '</div>' +
+      '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;">' +
+        '<button onclick="histPrint(' + rid + ')" style="padding:10px 6px;background:#1a237e;color:#fff;border:none;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;">🖨 Print</button>' +
+        '<button onclick="histEdit(' + rid + ')" style="padding:10px 6px;background:#f59e0b;color:#fff;border:none;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;">✏️ Edit</button>' +
+        '<button onclick="histDelete(' + rid + ')" style="padding:10px 6px;background:#e53935;color:#fff;border:none;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;">🗑 Delete</button>' +
+      '</div>' +
+    '</div>';
   }).join("");
 }
-function reprnt(r) { SAVED = r; goPage("booking"); setTimeout(function(){ window.scrollTo({top:document.body.scrollHeight,behavior:"smooth"}); }, 300); }
+
+function reprnt(r)   { SAVED = r; goPage("booking"); setTimeout(function(){ window.scrollTo({top:document.body.scrollHeight,behavior:"smooth"}); }, 300); }
+
+function histPrint(id) {
+  var r = HIST.filter(function(x){ return x.id===id; })[0];
+  if (!r) return;
+  SAVED = r;
+  doPrint();
+}
+
+function histEdit(id) {
+  var r = HIST.filter(function(x){ return x.id===id; })[0];
+  if (!r) return;
+  // Copy record into form for editing
+  F = Object.assign({}, r);
+  SAVED = null;
+  goPage("booking");
+  // After render, mark this as editing existing record
+  setTimeout(function(){
+    _editingId = id;
+    // Change save button text to indicate update
+    var btn = document.querySelector('[onclick="doSave()"]');
+    if (btn) btn.innerHTML = "💾 Update Receipt";
+    window.scrollTo({top:0, behavior:"smooth"});
+    toast("Editing record — make changes and tap Update Receipt", 3000);
+  }, 200);
+}
+
+function histDelete(id) {
+  var r = HIST.filter(function(x){ return x.id===id; })[0];
+  if (!r) return;
+  if (!confirm("Delete receipt for AWB " + r.awb + "?\nThis cannot be undone.")) return;
+  HIST = HIST.filter(function(x){ return x.id!==id; });
+  saveHist(); updBadge();
+  if (SAVED && SAVED.id === id) SAVED = null;
+  renderHistory();
+  toast("✅ Record deleted");
+}
+
+var _editingId = null;
+
 
 // ═══════════════════════ SUMMARY PAGE ════════════════════════════════════
 function todayStr() { return fmtD(new Date()).replace(/ /g,"_"); }
