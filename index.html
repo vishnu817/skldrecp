@@ -167,9 +167,9 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
 <script>
 // ═══════════════════════ CONSTANTS ═══════════════════════════════════════
 var COURIERS = ["DTDC","Delhivery","Blue Dart","Mahindra Rivigo","XpressBees","Other"];
-var MODES    = ["Surface","Air","Express"];
+var MODES    = ["Surface","Air","Express","Express Pr"];
 var CONTENTS = ["Documents","Electronics","Clothing","Books","Medicine","Gift Items","Other"];
-var PAYMENT  = ["Cash","Online / UPI","Credit (Account)"];
+var PAYMENT  = ["Cash","COD","Online / UPI","Credit (Account)"];
 var RED = "#CC0000", DARK = "#1a1a1a";
 
 // ═══════════════════════ STATE ════════════════════════════════════════════
@@ -659,7 +659,8 @@ function bookingHTML() {
     h += '<div id="rcv-wrap" style="overflow-x:auto;text-align:center;"></div></div>';
     h += '<div style="display:flex;flex-direction:column;gap:10px;margin-bottom:14px;">';
     h += '<button class="btn b-wa" onclick="openShare()">📲 Share Receipt Image (WhatsApp / Any App)</button>';
-    h += '<button class="btn b-dark" onclick="doPrint()">🖨 Print Receipt</button>';
+    h += '<button class="btn b-dark" onclick="doPrint()">🖨 Print (80mm Thermal)</button>';
+    h += '<button class="btn" style="background:#1a237e;color:#fff;" onclick="doPrintA5()">📄 Print A5 Receipt</button>';
     if (SAVED.senderPhone && SAVED.senderPhone.trim().length >= 10) {
       h += '<button class="btn" style="background:#075e54;color:#fff;" onclick="waSender()">💬 Send Booking Confirmation to Sender (' + SAVED.senderPhone + ')</button>';
     }
@@ -703,24 +704,202 @@ function doPrint() {
   var logH = 88+112+36+72+72+52+44+(hasRem?30:0)+74+114;
   var hMM = Math.round(logH / 340 * 80);
 
-  // Build a self-contained print page and write it to a new window
+  // Build a self-contained print page — zero margins everywhere
   var html = [
-    "<!DOCTYPE html><html><head><meta charset='UTF-8'>",
+    "<!DOCTYPE html>",
+    "<html>",
+    "<head>",
+    "<meta charset='UTF-8'>",
     "<style>",
-    "*{margin:0;padding:0;}",
-    "body{width:80mm;background:#fff;}",
-    "img{width:80mm;height:auto;display:block;}",
-    "@page{size:80mm " + hMM + "mm;margin:0;}",
-    "</style></head><body>",
-    "<img src='" + dataURL + "' onload='window.print();'/>",
-    "</body></html>"
+    "  *,*::before,*::after{margin:0!important;padding:0!important;box-sizing:border-box!important;}",
+    "  html,body{width:80mm!important;height:auto!important;background:#fff!important;overflow:hidden!important;}",
+    "  body{position:absolute!important;top:0!important;left:0!important;}",
+    "  img{position:absolute!important;top:0!important;left:0!important;width:80mm!important;height:auto!important;display:block!important;}",
+    "  @page{size:80mm " + hMM + "mm!important;margin:0!important;padding:0!important;}",
+    "</style>",
+    "</head>",
+    "<body>",
+    "<img src='" + dataURL + "' onload='setTimeout(function(){window.print();},100);'/>",
+    "</body>",
+    "</html>"
   ].join("");
 
-  var win = window.open("", "_blank", "width=320,height=700");
+  var win = window.open("", "_blank", "width=320,height=600,menubar=no,toolbar=no,location=no,status=no");
   if (!win) { toast("Allow popups for printing"); return; }
   win.document.open();
   win.document.write(html);
   win.document.close();
+}
+
+
+function doPrintA5() {
+  if (!SAVED) return;
+  var dataURL = makeA5Canvas(SAVED).toDataURL("image/png");
+  var html = [
+    "<!DOCTYPE html><html><head><meta charset='UTF-8'>",
+    "<style>",
+    "  *,*::before,*::after{margin:0!important;padding:0!important;box-sizing:border-box!important;}",
+    "  html,body{width:148mm!important;background:#fff!important;}",
+    "  body{position:absolute!important;top:0!important;left:0!important;}",
+    "  img{position:absolute!important;top:0!important;left:0!important;width:148mm!important;height:auto!important;display:block!important;}",
+    "  @page{size:A5 portrait!important;margin:0!important;}",
+    "</style></head><body>",
+    "<img src='" + dataURL + "' onload='setTimeout(function(){window.print();},100);'/>",
+    "</body></html>"
+  ].join("");
+  var win = window.open("","_blank","width=500,height=750,menubar=no,toolbar=no,location=no,status=no");
+  if (!win) { toast("Allow popups for printing"); return; }
+  win.document.open(); win.document.write(html); win.document.close();
+}
+
+function histPrintA5(id) {
+  var r = HIST.filter(function(x){ return x.id===id; })[0];
+  if (!r) return;
+  SAVED = r; doPrintA5();
+}
+
+function makeA5Canvas(r) {
+  // A5 = 148mm x 210mm at 96dpi = 559px x 794px logical
+  var W = 559, H = 794;
+  var cv = document.createElement("canvas");
+  cv.width = W; cv.height = H;
+  cv.style.width = W+"px"; cv.style.height = H+"px";
+  var ctx = cv.getContext("2d");
+
+  var RED="#e53935", NAVY="#1a237e", DARK="#1a1a1a", MID="#3949ab", LGRAY="#f5f5f5", GRAY="#888";
+
+  function sline(y,col,w){ ctx.save();ctx.setLineDash([]);ctx.strokeStyle=col||NAVY;ctx.lineWidth=w||1;ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(W,y);ctx.stroke();ctx.restore(); }
+  function dline(y){ ctx.save();ctx.setLineDash([5,5]);ctx.strokeStyle="#ccc";ctx.lineWidth=0.8;ctx.beginPath();ctx.moveTo(20,y);ctx.lineTo(W-20,y);ctx.stroke();ctx.restore(); }
+  function vline(x,y1,y2){ ctx.save();ctx.setLineDash([5,5]);ctx.strokeStyle="#ccc";ctx.lineWidth=0.8;ctx.beginPath();ctx.moveTo(x,y1);ctx.lineTo(x,y2);ctx.stroke();ctx.restore(); }
+  function row(y,h2,bg){ ctx.fillStyle=bg; ctx.fillRect(0,y,W,h2); }
+  function grad(y1,y2,c1,c2){ var g=ctx.createLinearGradient(0,y1,0,y2); g.addColorStop(0,c1); g.addColorStop(1,c2); return g; }
+
+  // White background
+  ctx.fillStyle="#fff"; ctx.fillRect(0,0,W,H);
+
+  var y = 0;
+
+  // ── HEADER ─────────────────────────────────────────────────────────────
+  ctx.fillStyle=grad(0,130,NAVY,MID); ctx.fillRect(0,0,W,130);
+  // Sheen
+  var sh=ctx.createLinearGradient(0,0,W,130);
+  sh.addColorStop(0,"rgba(255,255,255,0.12)"); sh.addColorStop(1,"rgba(255,255,255,0)");
+  ctx.fillStyle=sh; ctx.fillRect(0,0,W,130);
+  // Red top stripe
+  ctx.fillStyle=RED; ctx.fillRect(0,0,W,6);
+  // ── SK LOGISTICS LOGO (text-based, A5 only) ──
+  // Big circular badge
+  ctx.save();
+  ctx.fillStyle="rgba(255,255,255,0.12)"; ctx.beginPath(); ctx.arc(80,70,52,0,Math.PI*2); ctx.fill();
+  ctx.strokeStyle="rgba(255,255,255,0.35)"; ctx.lineWidth=2; ctx.stroke();
+  ctx.fillStyle="#fff"; ctx.font="bold 11px Arial"; ctx.textAlign="center"; ctx.fillText("SK",80,56);
+  ctx.font="bold 9px Arial"; ctx.fillText("LOGISTICS",80,70);
+  ctx.fillStyle=RED; ctx.beginPath(); ctx.arc(80,82,10,0,Math.PI*2); ctx.fill();
+  ctx.fillStyle="#fff"; ctx.font="bold 8px Arial"; ctx.fillText("HYD",80,86);
+  ctx.restore();
+  // Company name
+  ctx.fillStyle="#fff"; ctx.textAlign="left"; ctx.font="bold 32px Arial"; ctx.fillText("SK LOGISTICS",148,55);
+  ctx.fillStyle="rgba(255,255,255,0.78)"; ctx.font="13px Arial"; ctx.fillText("Bahadurpura, Hyderabad \u2013 500064",148,78);
+  ctx.fillStyle="rgba(255,255,255,0.92)"; ctx.font="bold 12px Arial"; ctx.fillText("Authorized DTDC & Rivigo Franchisee",148,100);
+  ctx.fillStyle="rgba(255,255,255,0.6)"; ctx.font="11px Arial"; ctx.fillText("\u260E 8919855159  |  8886507472",148,118);
+  // Red bottom stripe
+  ctx.fillStyle=RED; ctx.fillRect(0,124,W,6);
+  y = 130;
+
+  // ── AWB SECTION ─────────────────────────────────────────────────────────
+  row(y,70,"#fff");
+  ctx.fillStyle=GRAY; ctx.font="11px Arial"; ctx.textAlign="center"; ctx.fillText("AWB NUMBER",W/2,y+20);
+  ctx.fillStyle=RED; ctx.font="bold 28px Arial"; ctx.fillText(r.awb||"",W/2,y+50);
+  sline(y+70,"#e0e0e0",0.8); y+=70;
+
+  // ── BARCODE ─────────────────────────────────────────────────────────────
+  row(y,60,"#fff");
+  if(r.awb) drawBCctx(ctx,r.awb,30,y+8,W-60,44);
+  sline(y+60,"#e0e0e0",0.8); y+=60;
+
+  // ── DATE / COURIER ROW ──────────────────────────────────────────────────
+  row(y,36,LGRAY);
+  ctx.fillStyle=DARK; ctx.font="12px Arial"; ctx.textAlign="left"; ctx.fillText("Date: "+fmtDT(new Date(r.dateTime)),20,y+23);
+  ctx.fillStyle="#fff"; ctx.fillRect(W-160,y+8,155,22);
+  ctx.fillStyle=RED; ctx.fillRect(W-160,y+8,155,22);
+  ctx.fillStyle="#fff"; ctx.font="bold 11px Arial"; ctx.textAlign="center";
+  ctx.fillText((r.courier||"DTDC")+" | "+(r.mode||"Surface"),W-83,y+23);
+  sline(y+36,"#e0e0e0",0.8); y+=36;
+
+  // ── ROUTE ───────────────────────────────────────────────────────────────
+  row(y,80,"#fff");
+  // FROM box
+  ctx.strokeStyle=NAVY; ctx.lineWidth=1.5; ctx.setLineDash([]); ctx.strokeRect(20,y+8,W/2-30,64);
+  ctx.fillStyle=GRAY; ctx.font="bold 10px Arial"; ctx.textAlign="center"; ctx.fillText("FROM",W/4,y+25);
+  ctx.fillStyle=RED; ctx.font="bold 18px Arial"; ctx.fillText("Hyderabad",W/4,y+48);
+  ctx.fillStyle=GRAY; ctx.font="12px Arial"; ctx.fillText("500064",W/4,y+66);
+  // Arrow
+  ctx.fillStyle=RED; ctx.font="bold 28px Arial"; ctx.fillText("\u279C",W/2,y+48);
+  // TO box
+  ctx.strokeStyle=NAVY; ctx.lineWidth=1.5; ctx.strokeRect(W/2+10,y+8,W/2-30,64);
+  ctx.fillStyle=GRAY; ctx.font="bold 10px Arial"; ctx.fillText("TO",3*W/4,y+25);
+  ctx.fillStyle=NAVY; ctx.font="bold 18px Arial"; ctx.fillText(clip(r.destCity||"\u2014",14),3*W/4,y+48);
+  ctx.fillStyle=GRAY; ctx.font="12px Arial"; ctx.fillText(r.destPin||"",3*W/4,y+66);
+  sline(y+80,"#e0e0e0",0.8); y+=80;
+
+  // ── SENDER / RECEIVER ───────────────────────────────────────────────────
+  row(y,80,"#fff");
+  vline(W/2,y,y+80);
+  ctx.textAlign="left";
+  ctx.fillStyle=RED; ctx.font="bold 10px Arial"; ctx.fillText("SENDER",20,y+20);
+  ctx.fillStyle=DARK; ctx.font="bold 14px Arial"; ctx.fillText(clip(r.senderName||"\u2014",20),20,y+40);
+  ctx.fillStyle=GRAY; ctx.font="12px Arial"; ctx.fillText(r.senderPhone||"",20,y+58);
+  ctx.fillStyle=RED; ctx.font="bold 10px Arial"; ctx.fillText("RECEIVER",W/2+20,y+20);
+  ctx.fillStyle=DARK; ctx.font="bold 14px Arial"; ctx.fillText(clip(r.receiverName||"\u2014",20),W/2+20,y+40);
+  ctx.fillStyle=GRAY; ctx.font="12px Arial"; ctx.fillText(r.receiverPhone||"",W/2+20,y+58);
+  sline(y+80,"#e0e0e0",0.8); y+=80;
+
+  // ── DETAILS ROW ─────────────────────────────────────────────────────────
+  row(y,60,LGRAY);
+  var dcols=[W/6,W/2,5*W/6], dlbls=["Weight","Pieces","Contents"], dvals=[(r.weight||"0")+" kg",r.pieces||"1",r.contents||""];
+  for(var i=0;i<3;i++){
+    if(i>0) vline(W/3*i,y,y+60);
+    ctx.fillStyle=GRAY; ctx.font="10px Arial"; ctx.textAlign="center"; ctx.fillText(dlbls[i],dcols[i],y+20);
+    ctx.fillStyle=NAVY; ctx.font="bold 16px Arial"; ctx.fillText(dvals[i],dcols[i],y+46);
+  }
+  sline(y+60,"#e0e0e0",0.8); y+=60;
+
+  // ── CHARGES ─────────────────────────────────────────────────────────────
+  row(y,54,"#fff");
+  ctx.fillStyle=DARK; ctx.font="14px Arial"; ctx.textAlign="left"; ctx.fillText("Payment: "+(r.payment||""),20,y+33);
+  ctx.fillStyle=RED; ctx.font="bold 26px Arial"; ctx.textAlign="right"; ctx.fillText("\u20B9 "+(r.charges||"0.00"),W-20,y+36);
+  sline(y+54,"#e0e0e0",0.8); y+=54;
+
+  // ── REMARKS ─────────────────────────────────────────────────────────────
+  if(r.remarks&&r.remarks.trim()){
+    row(y,34,"#fff");
+    ctx.fillStyle=GRAY; ctx.font="12px Arial"; ctx.textAlign="left"; ctx.fillText("Remarks: "+clip(r.remarks,60),20,y+22);
+    sline(y+34,"#e0e0e0",0.8); y+=34;
+  }
+
+  // ── DECLARATION ─────────────────────────────────────────────────────────
+  row(y,90,"#fffde7");
+  ctx.save(); ctx.setLineDash([4,4]); ctx.strokeStyle=NAVY; ctx.lineWidth=1; ctx.strokeRect(14,y+6,W-28,78); ctx.restore();
+  ctx.fillStyle=RED; ctx.font="bold 10px Arial"; ctx.textAlign="center"; ctx.fillText("** TERMS & DECLARATION **",W/2,y+22);
+  ctx.textAlign="left"; ctx.fillStyle=DARK; ctx.font="10px Arial";
+  var decl=["Consignor declares: No gold, silver, cash, jewellery or prohibited/dangerous goods are included.",
+    "SK Logistics is a SERVICE PROVIDER / carrier agent only. Not liable for contents.",
+    "Max liability: Documents \u20B91,500 | Non-Documents \u20B92,500 (Owner Risk).",
+    "For higher coverage, opt for Carrier Risk at time of booking.",
+    "Consignor is fully liable for accuracy of contents declared."];
+  for(var di=0;di<decl.length;di++) ctx.fillText(decl[di],22,y+36+di*12);
+  y+=90;
+
+  // ── FOOTER ──────────────────────────────────────────────────────────────
+  var remaining = H-y;
+  ctx.fillStyle=grad(y,H,MID,NAVY); ctx.fillRect(0,y,W,remaining);
+  ctx.fillStyle=RED; ctx.fillRect(0,y,W,4);
+  ctx.fillStyle="#fff"; ctx.font="bold 14px Arial"; ctx.textAlign="center"; ctx.fillText("Thank you for choosing SK LOGISTICS",W/2,y+30);
+  ctx.fillStyle="rgba(255,255,255,0.7)"; ctx.font="11px Arial"; ctx.fillText("Safe \u2022 Secure \u2022 Reliable",W/2,y+50);
+  ctx.fillText("\u260E 8919855159  |  8886507472  |  Bahadurpura, Hyderabad \u2013 500064",W/2,y+68);
+  ctx.fillStyle=RED; ctx.fillRect(0,H-4,W,4);
+
+  return cv;
 }
 
 
@@ -1038,9 +1217,10 @@ function histRows(list) {
         '<div><span style="color:#888;">Receiver:</span> ' + esc(r.receiverName||"—") + '</div>' +
         '<div><span style="color:#888;">Pay:</span> ' + esc(r.payment) + '</div>' +
       '</div>' +
-      '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;">' +
-        '<button onclick="histPrint(' + rid + ')" style="padding:10px 6px;background:#1a237e;color:#fff;border:none;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;">🖨 Print</button>' +
-        '<button onclick="histEdit(' + rid + ')" style="padding:10px 6px;background:#f59e0b;color:#fff;border:none;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;">✏️ Edit</button>' +
+      '<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:6px;">' +
+        '<button onclick="histPrint(' + rid + ')" style="padding:10px 6px;background:#1a237e;color:#fff;border:none;border-radius:10px;font-size:12px;font-weight:700;cursor:pointer;">🖨 Thermal</button>' +
+        '<button onclick="histPrintA5(' + rid + ')" style="padding:10px 6px;background:#0369a1;color:#fff;border:none;border-radius:10px;font-size:12px;font-weight:700;cursor:pointer;">📄 A5</button>' +
+        '<button onclick="histEdit(' + rid + ')" style="padding:10px 6px;background:#f59e0b;color:#fff;border:none;border-radius:10px;font-size:12px;font-weight:700;cursor:pointer;">✏️ Edit</button>' +
         '<button onclick="histDelete(' + rid + ')" style="padding:10px 6px;background:#e53935;color:#fff;border:none;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;">🗑 Delete</button>' +
       '</div>' +
     '</div>';
