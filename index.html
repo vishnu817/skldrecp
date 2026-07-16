@@ -752,39 +752,31 @@ function doSave() {
 function doClear() { freshForm(); SAVED = null; renderBooking(); }
 function doPrint() {
   if (!SAVED) return;
-
   var c = makeReceiptCanvas(SAVED, true);
-  var dataURL = c.toDataURL("image/png");
-
   var hasRem = SAVED.remarks && SAVED.remarks.trim();
   var logH = 88+112+36+72+72+52+44+(hasRem?30:0)+74+114;
-  var hMM = Math.round(logH / 340 * 80);
+  var hMM  = Math.round(logH / 340 * 80);
 
-  // Build a self-contained print page — zero margins everywhere
-  var html = [
-    "<!DOCTYPE html>",
-    "<html>",
-    "<head>",
-    "<meta charset='UTF-8'>",
-    "<style>",
-    "  *,*::before,*::after{margin:0!important;padding:0!important;box-sizing:border-box!important;}",
-    "  html,body{width:80mm!important;height:auto!important;background:#fff!important;overflow:hidden!important;}",
-    "  body{position:absolute!important;top:0!important;left:0!important;}",
-    "  img{position:absolute!important;top:0!important;left:0!important;width:80mm!important;height:auto!important;display:block!important;}",
-    "  @page{size:80mm " + hMM + "mm!important;margin:0!important;padding:0!important;}",
-    "</style>",
-    "</head>",
-    "<body>",
-    "<img src='" + dataURL + "' onload='setTimeout(function(){window.print();},100);'/>",
-    "</body>",
-    "</html>"
-  ].join("");
+  // Convert canvas to blob, create object URL — most reliable cross-browser
+  c.toBlob(function(blob) {
+    var url = URL.createObjectURL(blob);
+    var html =
+      "<!DOCTYPE html><html><head><meta charset='UTF-8'><style>" +
+      "*{margin:0;padding:0;box-sizing:border-box;}" +
+      "html,body{width:80mm;margin:0;padding:0;background:#fff;}" +
+      "img{display:block;width:80mm;height:auto;margin:0;padding:0;}" +
+      "@page{size:80mm " + hMM + "mm;margin:0;}" +
+      "</style></head><body>" +
+      "<img src='" + url + "'/>" +
+      "<script>window.onload=function(){setTimeout(function(){window.print();URL.revokeObjectURL('" + url + "');},300);};<\/script>" +
+      "</body></html>";
 
-  var win = window.open("", "_blank", "width=320,height=600,menubar=no,toolbar=no,location=no,status=no");
-  if (!win) { toast("Allow popups for printing"); return; }
-  win.document.open();
-  win.document.write(html);
-  win.document.close();
+    var win = window.open("","_blank","width=400,height=600,menubar=no,toolbar=no,location=no,status=no");
+    if (!win) { toast("Allow popups for printing"); return; }
+    win.document.open();
+    win.document.write(html);
+    win.document.close();
+  }, "image/png");
 }
 
 
@@ -1579,142 +1571,185 @@ function makeA5Canvas(r, copyLabel, showAddr, deliveryAddr) {
 
 
 function makeA5DoubleCanvas(r, showAddr, deliveryAddr) {
-  // A5 landscape = 794x559px. Each half = 276px (559/2 - 3 separator - 4 margins)
-  var W=794, H=559;
-  var SEP=6; // separator height
-  var HALF=Math.floor((H-SEP)/2);
+  // A5 landscape 794x559. Two halves separated by 6px red bar.
+  var W=794, H=559, SEP=6, HALF=Math.floor((H-SEP)/2); // HALF=276
+  var LP=150; // left panel width
+  var RX=LP+6, RW=W-RX-6; // right panel x and width
+
   var cv=document.createElement("canvas"); cv.width=W; cv.height=H;
   var ctx=cv.getContext("2d");
-  var RED="#e53935",NAVY="#1a237e",MID="#3949ab",DARK="#1a1a1a",GRAY="#666",LGRAY="#f5f7ff";
+  var RED="#e53935",NAVY="#1a237e",MID="#3949ab",DARK="#1a1a1a",GRAY="#555",LGRAY="#f5f7ff";
 
   ctx.fillStyle="#fff"; ctx.fillRect(0,0,W,H);
 
-  function drawHalf(label, yOff) {
-    var LP=150, RX=LP+6, RW=W-RX-6;
-    // Clip to this half
+  // ── helper: draw one half starting at yOff ──────────────────────────────
+  function half(label, yOff) {
+
+    // CLIP to this half
     ctx.save();
     ctx.beginPath(); ctx.rect(0,yOff,W,HALF); ctx.clip();
 
-    // Left panel
+    // ── LEFT PANEL ──────────────────────────────────────────────────────────
     var g=ctx.createLinearGradient(0,yOff,0,yOff+HALF);
     g.addColorStop(0,NAVY); g.addColorStop(1,MID);
     ctx.fillStyle=g; ctx.fillRect(0,yOff,LP,HALF);
-    ctx.fillStyle=RED; ctx.fillRect(0,yOff,LP,4);
+    // top red stripe
+    ctx.fillStyle=RED; ctx.fillRect(0,yOff,LP,5);
+    // logo
+    if(window.SKL_LOGO) ctx.drawImage(window.SKL_LOGO,3,yOff+7,LP-6,46);
+    else { ctx.fillStyle="#fff";ctx.font="bold 12px Arial";ctx.textAlign="center"; ctx.fillText("SK LOGISTICS",LP/2,yOff+34); }
+    // text
+    ctx.fillStyle="rgba(255,255,255,0.85)"; ctx.font="bold 7px Arial"; ctx.textAlign="center";
+    ctx.fillText("Auth. DTDC & Rivigo Franchisee",LP/2,yOff+58);
+    ctx.fillStyle="rgba(255,255,255,0.6)"; ctx.font="7px Arial";
+    ctx.fillText("\u260E 8919855159 | 8886507472",LP/2,yOff+69);
+    // thin red rule
+    ctx.fillStyle=RED; ctx.fillRect(4,yOff+75,LP-8,1.5);
+    // AWB
+    ctx.fillStyle="rgba(255,255,255,0.5)"; ctx.font="7px Arial"; ctx.fillText("AWB",LP/2,yOff+84);
+    ctx.fillStyle="#fff"; ctx.font="bold 11px Arial"; ctx.fillText(r.awb||"",LP/2,yOff+96);
+    if(r.awb) drawBCctx(ctx,r.awb,4,yOff+100,LP-8,24);
+    // courier badge
+    ctx.fillStyle=RED; ctx.fillRect(4,yOff+128,LP-8,15);
+    ctx.fillStyle="#fff"; ctx.font="bold 7.5px Arial";
+    ctx.fillText((r.courier||"DTDC")+" \u2022 "+(r.mode||""),LP/2,yOff+139);
+    // date
+    ctx.fillStyle="rgba(255,255,255,0.55)"; ctx.font="7px Arial";
+    ctx.fillText(fmtDT(new Date(r.dateTime)),LP/2,yOff+152);
+    // copy label — bottom of left panel
+    ctx.fillStyle=RED; ctx.fillRect(0,yOff+HALF-22,LP,18);
+    ctx.fillStyle="#fff"; ctx.font="bold 8px Arial"; ctx.textAlign="center";
+    ctx.fillText(label,LP/2,yOff+HALF-10);
+    // bottom red stripe
+    ctx.fillStyle=RED; ctx.fillRect(0,yOff+HALF-4,LP,4);
 
-    if(window.SKL_LOGO){ctx.drawImage(window.SKL_LOGO,4,yOff+6,LP-8,48);}
-    else{ctx.fillStyle="#fff";ctx.font="bold 13px Arial";ctx.textAlign="center";ctx.fillText("SK LOGISTICS",LP/2,yOff+32);}
+    // ── RIGHT PANEL — layout from top AND bottom, meeting in middle ─────────
+    // TOP section: route + sender/receiver + address + details = fixed height
+    // BOTTOM section: signatures = 34px pinned to bottom
+    // MIDDLE: terms fills remaining space
 
-    ctx.fillStyle="rgba(255,255,255,0.88)";ctx.font="bold 7.5px Arial";ctx.textAlign="center";
-    ctx.fillText("Auth. DTDC & Rivigo Franchisee",LP/2,yOff+60);
-    ctx.fillStyle="rgba(255,255,255,0.65)";ctx.font="7.5px Arial";
-    ctx.fillText("\u260E 8919855159|8886507472",LP/2,yOff+72);
-    ctx.fillStyle=RED;ctx.fillRect(6,yOff+79,LP-12,1.5);
-    ctx.fillStyle="rgba(255,255,255,0.5)";ctx.font="7.5px Arial";ctx.fillText("AWB",LP/2,yOff+89);
-    ctx.fillStyle="#fff";ctx.font="bold 11px Arial";ctx.fillText(r.awb||"",LP/2,yOff+101);
-    if(r.awb)drawBCctx(ctx,r.awb,6,yOff+106,LP-12,24);
-    ctx.fillStyle=RED;ctx.fillRect(6,yOff+134,LP-12,16);
-    ctx.fillStyle="#fff";ctx.font="bold 8px Arial";
-    ctx.fillText((r.courier||"DTDC")+" \u2022 "+(r.mode||""),LP/2,yOff+145);
-    ctx.fillStyle="rgba(255,255,255,0.55)";ctx.font="7px Arial";
-    ctx.fillText(fmtDT(new Date(r.dateTime)),LP/2,yOff+158);
-    // Copy label — pinned to bottom of left panel
-    ctx.fillStyle=RED;ctx.fillRect(0,yOff+HALF-20,LP,16);
-    ctx.fillStyle="#fff";ctx.font="bold 8px Arial";ctx.textAlign="center";
-    ctx.fillText(label,LP/2,yOff+HALF-9);
-    ctx.fillStyle=RED;ctx.fillRect(0,yOff+HALF-4,LP,4);
+    var SIG_H = 34;   // signature box height
+    var sigY  = yOff + HALF - SIG_H - 2; // 2px padding from bottom
 
-    // Right panel content — stack from top, signatures pinned to bottom
-    var ry=yOff+4;
+    var ry = yOff + 4; // current y pointer from top
 
-    // Route
-    ctx.fillStyle=LGRAY;ctx.fillRect(RX,ry,RW,30);
-    ctx.strokeStyle=NAVY;ctx.lineWidth=0.8;ctx.setLineDash([]);ctx.strokeRect(RX,ry,RW,30);
-    ctx.fillStyle=RED;ctx.font="bold 11px Arial";ctx.textAlign="left";
-    ctx.fillText("Hyderabad \u2013 500064",RX+8,ry+20);
-    ctx.fillStyle=RED;ctx.font="bold 18px Arial";ctx.textAlign="center";ctx.fillText("\u279C",RX+RW/2,ry+22);
-    ctx.fillStyle=NAVY;ctx.font="bold 11px Arial";ctx.textAlign="right";
-    ctx.fillText(clip(r.destCity||"\u2014",16)+(r.destPin?" \u2013 "+r.destPin:""),RX+RW-8,ry+20);
-    ry+=34;
+    // Route bar — 30px
+    ctx.fillStyle=LGRAY; ctx.fillRect(RX,ry,RW,30);
+    ctx.strokeStyle=NAVY; ctx.lineWidth=0.8; ctx.setLineDash([]); ctx.strokeRect(RX,ry,RW,30);
+    ctx.fillStyle=RED; ctx.font="bold 10px Arial"; ctx.textAlign="left";
+    ctx.fillText("Hyderabad \u2013 500064",RX+6,ry+20);
+    ctx.fillStyle=RED; ctx.font="bold 16px Arial"; ctx.textAlign="center";
+    ctx.fillText("\u279C",RX+RW/2,ry+22);
+    ctx.fillStyle=NAVY; ctx.font="bold 10px Arial"; ctx.textAlign="right";
+    ctx.fillText(clip(r.destCity||"\u2014",17)+(r.destPin?" \u2013 "+r.destPin:""),RX+RW-6,ry+20);
+    ry+=33;
 
-    // Sender / Receiver
+    // Sender / Receiver — 40px
     var hw=Math.floor(RW/2)-3;
-    ctx.fillStyle=LGRAY;ctx.fillRect(RX,ry,hw,42);ctx.strokeStyle=NAVY;ctx.lineWidth=0.8;ctx.strokeRect(RX,ry,hw,42);
-    ctx.fillStyle=RED;ctx.font="bold 8px Arial";ctx.textAlign="left";ctx.fillText("SENDER",RX+6,ry+12);
-    ctx.fillStyle=DARK;ctx.font="bold 11px Arial";ctx.fillText(clip(r.senderName||"\u2014",20),RX+6,ry+26);
-    ctx.fillStyle=GRAY;ctx.font="10px Arial";ctx.fillText(r.senderPhone||"",RX+6,ry+38);
+    ctx.fillStyle=LGRAY; ctx.fillRect(RX,ry,hw,40);
+    ctx.strokeStyle=NAVY; ctx.lineWidth=0.8; ctx.strokeRect(RX,ry,hw,40);
+    ctx.fillStyle=RED; ctx.font="bold 8px Arial"; ctx.textAlign="left";
+    ctx.fillText("SENDER",RX+5,ry+11);
+    ctx.fillStyle=DARK; ctx.font="bold 11px Arial";
+    ctx.fillText(clip(r.senderName||"\u2014",20),RX+5,ry+24);
+    ctx.fillStyle=GRAY; ctx.font="9px Arial";
+    ctx.fillText(r.senderPhone||"",RX+5,ry+36);
     var rx2=RX+hw+5;
-    ctx.fillStyle=LGRAY;ctx.fillRect(rx2,ry,hw,42);ctx.strokeStyle=NAVY;ctx.lineWidth=0.8;ctx.strokeRect(rx2,ry,hw,42);
-    ctx.fillStyle=RED;ctx.font="bold 8px Arial";ctx.fillText("RECEIVER",rx2+6,ry+12);
-    ctx.fillStyle=DARK;ctx.font="bold 11px Arial";ctx.fillText(clip(r.receiverName||"\u2014",20),rx2+6,ry+26);
-    ctx.fillStyle=GRAY;ctx.font="10px Arial";ctx.fillText(r.receiverPhone||"",rx2+6,ry+38);
-    ry+=48;
+    ctx.fillStyle=LGRAY; ctx.fillRect(rx2,ry,hw,40);
+    ctx.strokeStyle=NAVY; ctx.lineWidth=0.8; ctx.strokeRect(rx2,ry,hw,40);
+    ctx.fillStyle=RED; ctx.font="bold 8px Arial";
+    ctx.fillText("RECEIVER",rx2+5,ry+11);
+    ctx.fillStyle=DARK; ctx.font="bold 11px Arial";
+    ctx.fillText(clip(r.receiverName||"\u2014",20),rx2+5,ry+24);
+    ctx.fillStyle=GRAY; ctx.font="9px Arial";
+    ctx.fillText(r.receiverPhone||"",rx2+5,ry+36);
+    ry+=44;
 
-    // Delivery address
-    if(showAddr&&deliveryAddr){
-      ctx.fillStyle="#fff";ctx.fillRect(RX,ry,RW,26);ctx.strokeStyle=NAVY;ctx.lineWidth=0.8;ctx.strokeRect(RX,ry,RW,26);
-      ctx.fillStyle=RED;ctx.font="bold 8px Arial";ctx.textAlign="left";ctx.fillText("DELIVERY ADDRESS:",RX+6,ry+10);
-      ctx.fillStyle=DARK;ctx.font="9px Arial";ctx.fillText(clip(deliveryAddr,90),RX+6,ry+21);
-      ry+=30;
+    // Delivery address — 24px (optional)
+    if(showAddr && deliveryAddr){
+      ctx.fillStyle="#fff"; ctx.fillRect(RX,ry,RW,24);
+      ctx.strokeStyle=NAVY; ctx.lineWidth=0.8; ctx.strokeRect(RX,ry,RW,24);
+      ctx.fillStyle=RED; ctx.font="bold 7.5px Arial"; ctx.textAlign="left";
+      ctx.fillText("DELIVERY:",RX+5,ry+9);
+      ctx.fillStyle=DARK; ctx.font="9px Arial";
+      ctx.fillText(clip(deliveryAddr,88),RX+58,ry+9);
+      ry+=27;
     }
 
-    // Details
-    ctx.fillStyle=LGRAY;ctx.fillRect(RX,ry,RW,30);ctx.strokeStyle=NAVY;ctx.lineWidth=0.8;ctx.strokeRect(RX,ry,RW,30);
-    var dW=RW/4,dl=["Weight","Pieces","Contents","Payment"],dv=[(r.weight||"0")+" kg",r.pieces||"1",r.contents||"",r.payment||""];
+    // Details grid — 30px
+    ctx.fillStyle=LGRAY; ctx.fillRect(RX,ry,RW,30);
+    ctx.strokeStyle=NAVY; ctx.lineWidth=0.8; ctx.strokeRect(RX,ry,RW,30);
+    var dW=RW/4;
+    var dl=["Weight","Pieces","Contents","Payment"];
+    var dv=[(r.weight||"0")+" kg",r.pieces||"1",r.contents||"",r.payment||""];
     for(var i=0;i<4;i++){
-      if(i>0){ctx.save();ctx.setLineDash([]);ctx.strokeStyle="#ddd";ctx.lineWidth=0.7;ctx.beginPath();ctx.moveTo(RX+i*dW,ry);ctx.lineTo(RX+i*dW,ry+30);ctx.stroke();ctx.restore();}
-      ctx.fillStyle=GRAY;ctx.font="7.5px Arial";ctx.textAlign="center";ctx.fillText(dl[i],RX+i*dW+dW/2,ry+11);
-      ctx.fillStyle=NAVY;ctx.font="bold 11px Arial";ctx.fillText(dv[i],RX+i*dW+dW/2,ry+25);
+      if(i>0){
+        ctx.save();ctx.setLineDash([]);ctx.strokeStyle="#ddd";ctx.lineWidth=0.7;
+        ctx.beginPath();ctx.moveTo(RX+i*dW,ry);ctx.lineTo(RX+i*dW,ry+30);ctx.stroke();ctx.restore();
+      }
+      ctx.fillStyle=GRAY; ctx.font="7px Arial"; ctx.textAlign="center";
+      ctx.fillText(dl[i],RX+i*dW+dW/2,ry+10);
+      ctx.fillStyle=NAVY; ctx.font="bold 11px Arial";
+      ctx.fillText(dv[i],RX+i*dW+dW/2,ry+25);
     }
-    ctx.fillStyle=RED;ctx.font="bold 14px Arial";ctx.textAlign="right";
-    ctx.fillText("\u20B9 "+(r.charges||"0"),RX+RW-6,ry+24);
-    ry+=34;
+    // Charges overlaid right
+    ctx.fillStyle=RED; ctx.font="bold 14px Arial"; ctx.textAlign="right";
+    ctx.fillText("\u20B9 "+(r.charges||"0"),RX+RW-4,ry+24);
+    ry+=33;
 
-    // Terms
-    var sigY=yOff+HALF-38; // signatures pinned to bottom
-    var termsH=sigY-ry-4;
-    if(termsH>0){
-      ctx.fillStyle="#fffde7";ctx.fillRect(RX,ry,RW,termsH);
-      ctx.save();ctx.setLineDash([3,3]);ctx.strokeStyle=NAVY;ctx.lineWidth=0.7;ctx.strokeRect(RX,ry,RW,termsH);ctx.restore();
-      ctx.fillStyle=RED;ctx.font="bold 7.5px Arial";ctx.textAlign="center";
+    // Terms & Conditions — fills gap between details and signatures
+    var termsH = sigY - ry - 3;
+    if(termsH > 12){
+      ctx.fillStyle="#fffde7"; ctx.fillRect(RX,ry,RW,termsH);
+      ctx.save();ctx.setLineDash([3,3]);ctx.strokeStyle=NAVY;ctx.lineWidth=0.7;
+      ctx.strokeRect(RX,ry,RW,termsH);ctx.restore();
+      ctx.fillStyle=RED; ctx.font="bold 7.5px Arial"; ctx.textAlign="center";
       ctx.fillText("** TERMS & DECLARATION **",RX+RW/2,ry+10);
-      ctx.fillStyle=DARK;ctx.font="7.5px Arial";ctx.textAlign="left";
-      var lines=[
-        "Consignor declares: No gold/silver/cash/jewellery or prohibited goods in this shipment.",
-        "SK Logistics is a SERVICE PROVIDER / carrier agent only. Not liable for contents.",
-        "Max liability: Docs \u20B91,500 | Non-Docs \u20B92,500 (Owner Risk). Opt Carrier Risk for higher coverage.",
-        "Consignor is fully liable for accuracy of contents. Loss/damage limited to above amounts."
+      ctx.fillStyle=DARK; ctx.font="7.5px Arial"; ctx.textAlign="left";
+      var terms=[
+        "Consignor declares: No gold/silver/cash/jewellery or prohibited/dangerous goods in this shipment.",
+        "SK Logistics is a SERVICE PROVIDER / carrier agent only. Not liable for contents of shipment.",
+        "Max liability: Documents \u20B91,500 | Non-Documents \u20B92,500 (Owner Risk).",
+        "For higher coverage opt Carrier Risk at booking. Consignor responsible for accuracy of contents."
       ];
-      for(var li=0;li<lines.length&&(ry+14+li*9)<sigY-4;li++){
-        ctx.fillText(lines[li],RX+6,ry+19+li*9);
+      for(var ti=0;ti<terms.length;ti++){
+        var ty=ry+18+ti*9;
+        if(ty+8<sigY) ctx.fillText(terms[ti],RX+5,ty);
       }
     }
 
-    // Signature boxes — PINNED TO BOTTOM
+    // ── SIGNATURE BOXES — pinned exactly to bottom ──────────────────────────
     var sigW=Math.floor(RW/3)-4;
     function sig(x,y2,lbl){
       ctx.fillStyle="#fff";ctx.strokeStyle=NAVY;ctx.lineWidth=0.8;ctx.setLineDash([]);
-      ctx.strokeRect(x,y2,sigW,34);
-      ctx.fillStyle=GRAY;ctx.font="8px Arial";ctx.textAlign="center";ctx.fillText(lbl,x+sigW/2,y2+12);
-      ctx.save();ctx.setLineDash([3,3]);ctx.strokeStyle="#bbb";ctx.lineWidth=0.6;
+      ctx.strokeRect(x,y2,sigW,SIG_H);
+      ctx.fillStyle=GRAY;ctx.font="8px Arial";ctx.textAlign="center";
+      ctx.fillText(lbl,x+sigW/2,y2+12);
+      ctx.save();ctx.setLineDash([3,3]);ctx.strokeStyle="#bbb";ctx.lineWidth=0.7;
       ctx.beginPath();ctx.moveTo(x+8,y2+26);ctx.lineTo(x+sigW-8,y2+26);ctx.stroke();ctx.restore();
-      ctx.fillStyle=GRAY;ctx.font="7px Arial";ctx.fillText("Signature",x+sigW/2,y2+32);
+      ctx.fillStyle=GRAY;ctx.font="7px Arial";
+      ctx.fillText("Signature",x+sigW/2,y2+33);
     }
-    sig(RX,             sigY,"Booking Executive");
-    sig(RX+sigW+6,      sigY,"Sender's Signature");
-    sig(RX+2*(sigW+6),  sigY,"Recipient's Signature");
+    sig(RX,              sigY, "Booking Executive");
+    sig(RX+sigW+6,       sigY, "Sender's Signature");
+    sig(RX+2*(sigW+6),   sigY, "Recipient's Signature");
 
-    ctx.restore();
+    ctx.restore(); // remove clip
   }
 
-  drawHalf("SENDER'S COPY",   0);
+  // Draw top half (Sender)
+  half("SENDER'S COPY", 0);
+
   // Red separator
   ctx.fillStyle=RED; ctx.fillRect(0,HALF,W,SEP);
-  // Dashed cut guide
+  // Dashed cut guide on right side
   ctx.save();ctx.setLineDash([8,5]);ctx.strokeStyle="#999";ctx.lineWidth=0.8;
-  ctx.beginPath();ctx.moveTo(LP+6,HALF+SEP/2);ctx.lineTo(W,HALF+SEP/2);ctx.stroke();ctx.restore();
-  ctx.fillStyle="#888";ctx.font="11px Arial";ctx.textAlign="left";ctx.fillText("✂",LP+8,HALF+SEP/2+4);
+  ctx.beginPath();ctx.moveTo(LP,HALF+SEP/2);ctx.lineTo(W,HALF+SEP/2);ctx.stroke();ctx.restore();
+  ctx.fillStyle="#888";ctx.font="13px Arial";ctx.textAlign="left";
+  ctx.fillText("\u2702",LP+6,HALF+SEP/2+5);
 
-  drawHalf("RECIPIENT'S COPY",HALF+SEP);
+  // Draw bottom half (Recipient)
+  half("RECIPIENT'S COPY", HALF+SEP);
 
   return cv;
 }
