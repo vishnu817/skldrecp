@@ -753,32 +753,32 @@ function doClear() { freshForm(); SAVED = null; renderBooking(); }
 function doPrint() {
   if (!SAVED) return;
   var c = makeReceiptCanvas(SAVED, true);
+  // DPR=1 canvas: width=340px, height=H px
+  // Scale to 80mm: heightMM = canvasHeight/340 * 80
   var hasRem = SAVED.remarks && SAVED.remarks.trim();
-  var logH = 88+112+36+72+72+52+44+(hasRem?30:0)+74+114;
-  var hMM  = Math.round(logH / 340 * 80);
+  var canvasH = 88+112+36+72+72+52+44+(hasRem?30:0)+74+114;
+  var hMM = Math.ceil(canvasH / 340 * 80);
 
-  // Convert canvas to blob, create object URL — most reliable cross-browser
   c.toBlob(function(blob) {
     var url = URL.createObjectURL(blob);
     var html =
-      "<!DOCTYPE html><html><head><meta charset='UTF-8'><style>" +
-      "*{margin:0;padding:0;box-sizing:border-box;}" +
-      "html,body{width:80mm;margin:0;padding:0;background:#fff;}" +
-      "img{display:block;width:80mm;height:auto;margin:0;padding:0;}" +
-      "@page{size:80mm " + hMM + "mm;margin:0;}" +
-      "</style></head><body>" +
-      "<img src='" + url + "'/>" +
-      "<script>window.onload=function(){setTimeout(function(){window.print();URL.revokeObjectURL('" + url + "');},300);};<\/script>" +
+      "<!DOCTYPE html><html><head><meta charset='UTF-8'>" +
+      "<style>" +
+      "*{margin:0!important;padding:0!important;border:0!important;box-sizing:border-box!important;}" +
+      "html,body{margin:0!important;padding:0!important;background:#fff!important;width:80mm!important;height:"+hMM+"mm!important;overflow:hidden!important;}" +
+      "img{display:block!important;width:80mm!important;height:"+hMM+"mm!important;margin:0!important;padding:0!important;}" +
+      "@page{size:80mm "+hMM+"mm!important;margin:0!important;padding:0!important;}" +
+      "</style></head>" +
+      "<body><img src='" + url + "' id='ri'/>" +
+      "<scr"+"ipt>" +
+      "window.onload=function(){setTimeout(function(){window.print();URL.revokeObjectURL('"+url+"');},200);};" +
+      "<\/scr"+"ipt>" +
       "</body></html>";
-
     var win = window.open("","_blank","width=400,height=600,menubar=no,toolbar=no,location=no,status=no");
     if (!win) { toast("Allow popups for printing"); return; }
-    win.document.open();
-    win.document.write(html);
-    win.document.close();
+    win.document.open(); win.document.write(html); win.document.close();
   }, "image/png");
 }
-
 
 function doPrintA5() {
   if (!SAVED) return;
@@ -1429,327 +1429,327 @@ function histPrintA5(id) {
 }
 
 function makeA5Canvas(r, copyLabel, showAddr, deliveryAddr) {
+  // A5 landscape: 794x559px
   var W=794, H=559;
   var cv=document.createElement("canvas"); cv.width=W; cv.height=H;
   var ctx=cv.getContext("2d");
-  var RED="#e53935",NAVY="#1a237e",MID="#3949ab",DARK="#1a1a1a",GRAY="#666",LGRAY="#f5f7ff";
+  var RED="#e53935",NAVY="#1a237e",MID="#3949ab",DARK="#1a1a1a",GRAY="#555",LGRAY="#f5f7ff";
 
-  function box(x,y,w2,h2,col,fill){ctx.save();ctx.setLineDash([]);if(fill){ctx.fillStyle=fill;ctx.fillRect(x,y,w2,h2);}ctx.strokeStyle=col||NAVY;ctx.lineWidth=1;ctx.strokeRect(x,y,w2,h2);ctx.restore();}
-  function grad(x1,y1,x2,y2,c1,c2){var g=ctx.createLinearGradient(x1,y1,x2,y2);g.addColorStop(0,c1);g.addColorStop(1,c2);return g;}
-  function signBox(x,y,w2,lbl){
-    box(x,y,w2,48,NAVY,"#fff");
-    ctx.fillStyle=GRAY;ctx.font="8.5px Arial";ctx.textAlign="center";ctx.fillText(lbl,x+w2/2,y+12);
-    ctx.save();ctx.setLineDash([3,3]);ctx.strokeStyle="#bbb";ctx.lineWidth=0.7;
-    ctx.beginPath();ctx.moveTo(x+10,y+34);ctx.lineTo(x+w2-10,y+34);ctx.stroke();ctx.restore();
-    ctx.fillStyle=GRAY;ctx.font="7.5px Arial";ctx.fillText("Signature",x+w2/2,y+44);
+  function box(x,y,w2,h2,stroke,fill){
+    ctx.save();ctx.setLineDash([]);
+    if(fill){ctx.fillStyle=fill;ctx.fillRect(x,y,w2,h2);}
+    ctx.strokeStyle=stroke||NAVY;ctx.lineWidth=1;ctx.strokeRect(x,y,w2,h2);
+    ctx.restore();
+  }
+  function grad(x1,y1,x2,y2,c1,c2){
+    var g=ctx.createLinearGradient(x1,y1,x2,y2);
+    g.addColorStop(0,c1);g.addColorStop(1,c2);return g;
   }
 
   ctx.fillStyle="#fff"; ctx.fillRect(0,0,W,H);
 
-  // ── LEFT PANEL ─────────────────────────────────────────────────────────
-  ctx.fillStyle=grad(0,0,0,H,NAVY,MID); ctx.fillRect(0,0,220,H);
-  var sh=ctx.createLinearGradient(0,0,220,H);
-  sh.addColorStop(0,"rgba(255,255,255,0.10)"); sh.addColorStop(1,"rgba(255,255,255,0.02)");
-  ctx.fillStyle=sh; ctx.fillRect(0,0,220,H);
-  ctx.fillStyle=RED; ctx.fillRect(0,0,220,5);
+  // ══ TOP HEADER BANNER (full width, 90px tall) ══════════════════════════
+  var HDR=90;
+  ctx.fillStyle=grad(0,0,0,HDR,NAVY,MID);
+  ctx.fillRect(0,0,W,HDR);
+  // sheen
+  var sh=ctx.createLinearGradient(0,0,W,HDR);
+  sh.addColorStop(0,"rgba(255,255,255,0.1)");sh.addColorStop(1,"rgba(255,255,255,0.02)");
+  ctx.fillStyle=sh;ctx.fillRect(0,0,W,HDR);
+  // red top stripe
+  ctx.fillStyle=RED;ctx.fillRect(0,0,W,5);
 
-  if(window.SKL_LOGO){ctx.drawImage(window.SKL_LOGO,8,10,204,72);}
-  else{ctx.fillStyle="#fff";ctx.font="bold 22px Arial";ctx.textAlign="center";ctx.fillText("SK LOGISTICS",110,52);}
+  // Logo left
+  var LOGO_W=160, LOGO_H=72;
+  if(window.SKL_LOGO){ctx.drawImage(window.SKL_LOGO,8,8,LOGO_W,LOGO_H);}
+  else{ctx.fillStyle="#fff";ctx.font="bold 18px Arial";ctx.textAlign="left";ctx.fillText("SK LOGISTICS",12,54);}
 
-  ctx.fillStyle="rgba(255,255,255,0.92)";ctx.font="bold 11px Arial";ctx.textAlign="center";
-  ctx.fillText("Authorized DTDC & Rivigo Franchisee",110,94);
-  ctx.fillStyle="rgba(255,255,255,0.72)";ctx.font="10px Arial";
-  ctx.fillText("Bahadurpura, Hyderabad \u2013 500064",110,110);
-  ctx.fillStyle="rgba(255,255,255,0.6)";ctx.font="9.5px Arial";
-  ctx.fillText("\u260E 8919855159 | 8886507472",110,126);
-  ctx.fillStyle=RED; ctx.fillRect(10,132,200,2);
+  // Company info centre
+  ctx.fillStyle="#fff";ctx.font="bold 18px Arial";ctx.textAlign="center";
+  ctx.fillText("SK LOGISTICS",W/2,32);
+  ctx.fillStyle="rgba(255,255,255,0.82)";ctx.font="10px Arial";
+  ctx.fillText("Bahadurpura, Hyderabad \u2013 500064  |  Authorized DTDC & Rivigo Franchisee",W/2,50);
+  ctx.fillStyle="rgba(255,255,255,0.65)";ctx.font="9.5px Arial";
+  ctx.fillText("\u260E 8919855159  |  8886507472",W/2,66);
 
-  ctx.fillStyle="rgba(255,255,255,0.55)";ctx.font="9px Arial";ctx.fillText("AWB NUMBER",110,150);
-  ctx.fillStyle="#fff";ctx.font="bold 16px Arial";ctx.fillText(r.awb||"",110,168);
-  if(r.awb) drawBCctx(ctx,r.awb,12,176,196,36);
-
-  ctx.fillStyle=RED; ctx.fillRect(12,222,196,22);
-  ctx.fillStyle="#fff";ctx.font="bold 10px Arial";ctx.textAlign="center";
-  ctx.fillText((r.courier||"DTDC")+" \u2022 "+(r.mode||"Surface"),110,237);
-  ctx.fillStyle="rgba(255,255,255,0.65)";ctx.font="9px Arial";
-  ctx.fillText(fmtDT(new Date(r.dateTime)),110,258);
-
-  // Copy label badge
+  // Copy label right badge
   if(copyLabel){
-    ctx.fillStyle="rgba(255,255,255,0.13)";ctx.fillRect(10,H-70,200,30);
-    ctx.strokeStyle=RED;ctx.lineWidth=1.5;ctx.setLineDash([]);ctx.strokeRect(10,H-70,200,30);
-    ctx.fillStyle=RED;ctx.font="bold 11px Arial";ctx.textAlign="center";
-    ctx.fillText(copyLabel,110,H-50);
+    var bw=160;
+    ctx.fillStyle=RED;ctx.fillRect(W-bw-8,18,bw,28);
+    ctx.strokeStyle="rgba(255,255,255,0.4)";ctx.lineWidth=1;ctx.setLineDash([]);
+    ctx.strokeRect(W-bw-8,18,bw,28);
+    ctx.fillStyle="#fff";ctx.font="bold 10px Arial";ctx.textAlign="center";
+    ctx.fillText(copyLabel,W-bw/2-8,36);
   }
-  ctx.fillStyle=RED; ctx.fillRect(0,H-5,220,5);
 
-  // ── RIGHT PANEL ────────────────────────────────────────────────────────
-  var RX=228, RW=W-RX-8, y=8;
+  // red bottom stripe
+  ctx.fillStyle=RED;ctx.fillRect(0,HDR-4,W,4);
+
+  // ══ AWB + BARCODE STRIP (full width, 52px) ═════════════════════════════
+  var AWB_Y=HDR, AWB_H=52;
+  ctx.fillStyle=LGRAY;ctx.fillRect(0,AWB_Y,W,AWB_H);
+  ctx.strokeStyle=NAVY;ctx.lineWidth=0.8;ctx.setLineDash([]);ctx.strokeRect(0,AWB_Y,W,AWB_H);
+
+  // AWB number left
+  ctx.fillStyle=GRAY;ctx.font="8px Arial";ctx.textAlign="left";
+  ctx.fillText("AWB NUMBER",10,AWB_Y+13);
+  ctx.fillStyle=RED;ctx.font="bold 20px Arial";
+  ctx.fillText(r.awb||"",10,AWB_Y+36);
+
+  // Barcode centre
+  if(r.awb) drawBCctx(ctx,r.awb,180,AWB_Y+4,380,40);
+
+  // Courier badge right
+  ctx.fillStyle=RED;ctx.fillRect(W-160,AWB_Y+8,155,18);
+  ctx.fillStyle="#fff";ctx.font="bold 9.5px Arial";ctx.textAlign="center";
+  ctx.fillText((r.courier||"DTDC")+" \u2022 "+(r.mode||"Surface"),W-82,AWB_Y+21);
+  ctx.fillStyle=GRAY;ctx.font="9px Arial";
+  ctx.fillText(fmtDT(new Date(r.dateTime)),W-82,AWB_Y+44);
+
+  // ══ MAIN CONTENT (below header+awb strip) ══════════════════════════════
+  var CY=HDR+AWB_H+4; // content starts here
+  var SIG_H=48;        // signature box height
+  var sigY=H-SIG_H-2; // signatures pinned to bottom
+  var CW=W-8;          // content width
 
   // Route bar
-  ctx.fillStyle=LGRAY;ctx.fillRect(RX,y,RW,44);
-  box(RX,y,RW,44,NAVY);
-  ctx.fillStyle=GRAY;ctx.font="bold 9px Arial";ctx.textAlign="left";ctx.fillText("FROM",RX+10,y+16);
-  ctx.fillStyle=RED;ctx.font="bold 14px Arial";ctx.fillText("Hyderabad \u2013 500064",RX+10,y+34);
-  ctx.fillStyle=RED;ctx.font="bold 22px Arial";ctx.textAlign="center";ctx.fillText("\u279C",RX+RW/2,y+30);
-  ctx.fillStyle=GRAY;ctx.font="bold 9px Arial";ctx.textAlign="right";ctx.fillText("TO",RX+RW-10,y+16);
-  ctx.fillStyle=NAVY;ctx.font="bold 14px Arial";
-  ctx.fillText(clip(r.destCity||"\u2014",18)+(r.destPin?" \u2013 "+r.destPin:""),RX+RW-10,y+34);
-  y+=52;
+  ctx.fillStyle=LGRAY;ctx.fillRect(4,CY,CW,38);
+  box(4,CY,CW,38,NAVY);
+  ctx.fillStyle=RED;ctx.font="bold 12px Arial";ctx.textAlign="left";
+  ctx.fillText("FROM:  Hyderabad \u2013 500064",14,CY+24);
+  ctx.fillStyle=RED;ctx.font="bold 20px Arial";ctx.textAlign="center";
+  ctx.fillText("\u279C",W/2,CY+26);
+  ctx.fillStyle=NAVY;ctx.font="bold 13px Arial";ctx.textAlign="right";
+  ctx.fillText("TO:  "+clip(r.destCity||"\u2014",18)+(r.destPin?" \u2013 "+r.destPin:""),W-14,CY+24);
+  var ry=CY+42;
 
   // Sender / Receiver
-  var hw=Math.floor(RW/2)-3;
-  box(RX,y,hw,60,NAVY,LGRAY);
-  ctx.fillStyle=RED;ctx.font="bold 9px Arial";ctx.textAlign="left";ctx.fillText("SENDER",RX+8,y+14);
-  ctx.fillStyle=DARK;ctx.font="bold 13px Arial";ctx.fillText(clip(r.senderName||"\u2014",21),RX+8,y+32);
-  ctx.fillStyle=GRAY;ctx.font="11px Arial";ctx.fillText(r.senderPhone||"",RX+8,y+50);
-  var rx2=RX+hw+6;
-  box(rx2,y,hw,60,NAVY,LGRAY);
-  ctx.fillStyle=RED;ctx.font="bold 9px Arial";ctx.fillText("RECEIVER",rx2+8,y+14);
-  ctx.fillStyle=DARK;ctx.font="bold 13px Arial";ctx.fillText(clip(r.receiverName||"\u2014",21),rx2+8,y+32);
-  ctx.fillStyle=GRAY;ctx.font="11px Arial";ctx.fillText(r.receiverPhone||"",rx2+8,y+50);
-  y+=66;
+  var hw=Math.floor(CW/2)-3;
+  box(4,ry,hw,58,NAVY,LGRAY);
+  ctx.fillStyle=RED;ctx.font="bold 9px Arial";ctx.textAlign="left";ctx.fillText("SENDER",12,ry+14);
+  ctx.fillStyle=DARK;ctx.font="bold 13px Arial";ctx.fillText(clip(r.senderName||"\u2014",24),12,ry+32);
+  ctx.fillStyle=GRAY;ctx.font="11px Arial";ctx.fillText(r.senderPhone||"",12,ry+48);
+  var rx2=4+hw+6;
+  box(rx2,ry,hw,58,NAVY,LGRAY);
+  ctx.fillStyle=RED;ctx.font="bold 9px Arial";ctx.fillText("RECEIVER",rx2+8,ry+14);
+  ctx.fillStyle=DARK;ctx.font="bold 13px Arial";ctx.fillText(clip(r.receiverName||"\u2014",24),rx2+8,ry+32);
+  ctx.fillStyle=GRAY;ctx.font="11px Arial";ctx.fillText(r.receiverPhone||"",rx2+8,ry+48);
+  ry+=62;
 
   // Delivery address (optional)
-  if(showAddr){
-    box(RX,y,RW,36,NAVY,"#fff");
-    ctx.fillStyle=RED;ctx.font="bold 9px Arial";ctx.textAlign="left";ctx.fillText("DELIVERY ADDRESS",RX+8,y+14);
-    ctx.fillStyle=DARK;ctx.font="11px Arial";
-    ctx.fillText(clip(deliveryAddr||(r.receiverName||"")+" | "+(r.destCity||"")+(r.destPin?" \u2013 "+r.destPin:""),72),RX+8,y+28);
-    y+=42;
+  if(showAddr&&deliveryAddr){
+    box(4,ry,CW,28,NAVY,"#fff");
+    ctx.fillStyle=RED;ctx.font="bold 9px Arial";ctx.textAlign="left";ctx.fillText("DELIVERY ADDRESS:",12,ry+12);
+    ctx.fillStyle=DARK;ctx.font="11px Arial";ctx.fillText(clip(deliveryAddr,90),145,ry+22);
+    ry+=32;
   }
 
   // Details grid
-  ctx.fillStyle=LGRAY;ctx.fillRect(RX,y,RW,42);box(RX,y,RW,42,NAVY);
-  var c4=[RX+RW/8,RX+3*RW/8,RX+5*RW/8,RX+7*RW/8];
-  var l4=["Weight","Pieces","Contents","Payment"],v4=[(r.weight||"0")+" kg",r.pieces||"1",r.contents||"",r.payment||""];
+  ctx.fillStyle=LGRAY;ctx.fillRect(4,ry,CW,40);
+  box(4,ry,CW,40,NAVY);
+  var dW=CW/4;
+  var dl=["Weight","Pieces","Contents","Payment"],dv=[(r.weight||"0")+" kg",r.pieces||"1",r.contents||"",r.payment||""];
   for(var i=0;i<4;i++){
-    if(i>0){ctx.save();ctx.setLineDash([]);ctx.strokeStyle="#ddd";ctx.lineWidth=0.8;ctx.beginPath();ctx.moveTo(RX+i*RW/4,y);ctx.lineTo(RX+i*RW/4,y+42);ctx.stroke();ctx.restore();}
-    ctx.fillStyle=GRAY;ctx.font="9px Arial";ctx.textAlign="center";ctx.fillText(l4[i],c4[i],y+14);
-    ctx.fillStyle=NAVY;ctx.font="bold 13px Arial";ctx.fillText(v4[i],c4[i],y+34);
+    if(i>0){ctx.save();ctx.setLineDash([]);ctx.strokeStyle="#ddd";ctx.lineWidth=0.8;ctx.beginPath();ctx.moveTo(4+i*dW,ry);ctx.lineTo(4+i*dW,ry+40);ctx.stroke();ctx.restore();}
+    ctx.fillStyle=GRAY;ctx.font="9px Arial";ctx.textAlign="center";ctx.fillText(dl[i],4+i*dW+dW/2,ry+14);
+    ctx.fillStyle=NAVY;ctx.font="bold 13px Arial";ctx.fillText(dv[i],4+i*dW+dW/2,ry+34);
   }
-  y+=48;
+  ry+=44;
 
   // Charges
-  box(RX,y,RW,34,NAVY,"#fff");
-  ctx.fillStyle=DARK;ctx.font="13px Arial";ctx.textAlign="left";ctx.fillText("Charges:",RX+10,y+22);
+  box(4,ry,CW,36,NAVY,"#fff");
+  ctx.fillStyle=DARK;ctx.font="13px Arial";ctx.textAlign="left";ctx.fillText("Payment: "+(r.payment||""),12,ry+23);
   ctx.fillStyle=RED;ctx.font="bold 22px Arial";ctx.textAlign="right";
-  ctx.fillText("\u20B9 "+(r.charges||"0.00"),RX+RW-10,y+24);
+  ctx.fillText("\u20B9 "+(r.charges||"0.00"),W-12,ry+25);
   if(r.remarks&&r.remarks.trim()){
     ctx.fillStyle=GRAY;ctx.font="10px Arial";ctx.textAlign="left";
-    ctx.fillText("Remarks: "+clip(r.remarks,40),RX+130,y+22);
+    ctx.fillText("Remarks: "+clip(r.remarks,50),140,ry+23);
   }
-  y+=40;
+  ry+=40;
 
-  // ── TERMS & CONDITIONS ───────────────────────────────────────────────────
-  var declH = showAddr ? 44 : 52;
-  ctx.fillStyle="#fffde7";ctx.fillRect(RX,y,RW,declH);
-  ctx.save();ctx.setLineDash([3,3]);ctx.strokeStyle=NAVY;ctx.lineWidth=0.8;ctx.strokeRect(RX,y,RW,declH);ctx.restore();
-  ctx.fillStyle=RED;ctx.font="bold 9px Arial";ctx.textAlign="center";
-  ctx.fillText("** TERMS & CONDITIONS / DECLARATION **",RX+RW/2,y+12);
-  ctx.fillStyle=DARK;ctx.font="8px Arial";ctx.textAlign="left";
-  var terms=[
-    "Consignor declares: No gold, silver, cash, currency, jewellery or prohibited/dangerous goods are included.",
-    "SK Logistics is a SERVICE PROVIDER / carrier agent only and is NOT liable for contents of the shipment.",
-    "Max liability: Documents \u20B91,500 | Non-Documents \u20B92,500 (Owner Risk). Opt Carrier Risk for higher coverage.",
-    "Consignor is fully liable for accuracy of contents declared. Loss/damage: liability limited to above amounts."
-  ];
-  var visibleLines = showAddr ? 3 : 4;
-  for(var ti=0;ti<visibleLines&&ti<terms.length;ti++){
-    ctx.fillText(terms[ti],RX+8,y+22+ti*9);
+  // Terms & Conditions — fills gap
+  var termsH=sigY-ry-4;
+  if(termsH>12){
+    ctx.fillStyle="#fffde7";ctx.fillRect(4,ry,CW,termsH);
+    ctx.save();ctx.setLineDash([3,3]);ctx.strokeStyle=NAVY;ctx.lineWidth=0.8;ctx.strokeRect(4,ry,CW,termsH);ctx.restore();
+    ctx.fillStyle=RED;ctx.font="bold 9px Arial";ctx.textAlign="center";
+    ctx.fillText("** TERMS & DECLARATION **",W/2,ry+14);
+    ctx.fillStyle=DARK;ctx.font="9px Arial";ctx.textAlign="left";
+    var terms=[
+      "Consignor declares: No gold, silver, cash, currency, jewellery or prohibited/dangerous goods are included in this shipment.",
+      "SK Logistics is a SERVICE PROVIDER / carrier agent only and is NOT liable for contents of the shipment.",
+      "Max liability: Documents \u20B91,500 | Non-Documents \u20B92,500 (Owner Risk). Opt Carrier Risk for higher coverage.",
+      "Consignor is fully liable for accuracy of contents declared. Any loss/damage limited to above amounts."
+    ];
+    for(var ti=0;ti<terms.length;ti++){
+      var ty=ry+24+ti*11;
+      if(ty+10<sigY) ctx.fillText(terms[ti],10,ty);
+    }
   }
-  y+=declH+4;
 
-  // ── SIGNATURE BOXES — at bottom ──────────────────────────────────────────
-  var sigW=Math.floor(RW/3)-4;
-  signBox(RX,            y, sigW, "Booking Executive");
-  signBox(RX+sigW+6,     y, sigW, "Sender's Signature");
-  signBox(RX+2*(sigW+6), y, sigW, "Recipient's Signature");
+  // ══ SIGNATURE BOXES — pinned to bottom ════════════════════════════════
+  var sigW=Math.floor(CW/3)-4;
+  function signBox(x,y2,lbl){
+    box(x,y2,sigW,SIG_H,NAVY,"#fff");
+    ctx.fillStyle=GRAY;ctx.font="9px Arial";ctx.textAlign="center";ctx.fillText(lbl,x+sigW/2,y2+14);
+    ctx.save();ctx.setLineDash([3,3]);ctx.strokeStyle="#bbb";ctx.lineWidth=0.8;
+    ctx.beginPath();ctx.moveTo(x+12,y2+34);ctx.lineTo(x+sigW-12,y2+34);ctx.stroke();ctx.restore();
+    ctx.fillStyle=GRAY;ctx.font="8px Arial";ctx.fillText("Signature",x+sigW/2,y2+44);
+  }
+  signBox(4,           sigY,"Booking Executive");
+  signBox(4+sigW+6,    sigY,"Sender's Signature");
+  signBox(4+2*(sigW+6),sigY,"Recipient's Signature");
 
   return cv;
 }
 
 
 function makeA5DoubleCanvas(r, showAddr, deliveryAddr) {
-  // A5 landscape 794x559. Two halves separated by 6px red bar.
-  var W=794, H=559, SEP=6, HALF=Math.floor((H-SEP)/2); // HALF=276
-  var LP=150; // left panel width
-  var RX=LP+6, RW=W-RX-6; // right panel x and width
-
+  var W=794, H=559, SEP=6, HALF=Math.floor((H-SEP)/2);
   var cv=document.createElement("canvas"); cv.width=W; cv.height=H;
   var ctx=cv.getContext("2d");
   var RED="#e53935",NAVY="#1a237e",MID="#3949ab",DARK="#1a1a1a",GRAY="#555",LGRAY="#f5f7ff";
 
   ctx.fillStyle="#fff"; ctx.fillRect(0,0,W,H);
 
-  // ── helper: draw one half starting at yOff ──────────────────────────────
-  function half(label, yOff) {
+  function drawHalf(label, yOff) {
+    var HDR=58, AWB_H=36, SIG_H=34;
+    var CY=yOff+HDR+AWB_H+2;
+    var sigY=yOff+HALF-SIG_H-2;
+    var CW=W-8;
 
-    // CLIP to this half
     ctx.save();
     ctx.beginPath(); ctx.rect(0,yOff,W,HALF); ctx.clip();
 
-    // ── LEFT PANEL ──────────────────────────────────────────────────────────
-    var g=ctx.createLinearGradient(0,yOff,0,yOff+HALF);
-    g.addColorStop(0,NAVY); g.addColorStop(1,MID);
-    ctx.fillStyle=g; ctx.fillRect(0,yOff,LP,HALF);
-    // top red stripe
-    ctx.fillStyle=RED; ctx.fillRect(0,yOff,LP,5);
-    // logo
-    if(window.SKL_LOGO) ctx.drawImage(window.SKL_LOGO,3,yOff+7,LP-6,46);
-    else { ctx.fillStyle="#fff";ctx.font="bold 12px Arial";ctx.textAlign="center"; ctx.fillText("SK LOGISTICS",LP/2,yOff+34); }
-    // text
-    ctx.fillStyle="rgba(255,255,255,0.85)"; ctx.font="bold 7px Arial"; ctx.textAlign="center";
-    ctx.fillText("Auth. DTDC & Rivigo Franchisee",LP/2,yOff+58);
-    ctx.fillStyle="rgba(255,255,255,0.6)"; ctx.font="7px Arial";
-    ctx.fillText("\u260E 8919855159 | 8886507472",LP/2,yOff+69);
-    // thin red rule
-    ctx.fillStyle=RED; ctx.fillRect(4,yOff+75,LP-8,1.5);
-    // AWB
-    ctx.fillStyle="rgba(255,255,255,0.5)"; ctx.font="7px Arial"; ctx.fillText("AWB",LP/2,yOff+84);
-    ctx.fillStyle="#fff"; ctx.font="bold 11px Arial"; ctx.fillText(r.awb||"",LP/2,yOff+96);
-    if(r.awb) drawBCctx(ctx,r.awb,4,yOff+100,LP-8,24);
-    // courier badge
-    ctx.fillStyle=RED; ctx.fillRect(4,yOff+128,LP-8,15);
-    ctx.fillStyle="#fff"; ctx.font="bold 7.5px Arial";
-    ctx.fillText((r.courier||"DTDC")+" \u2022 "+(r.mode||""),LP/2,yOff+139);
-    // date
-    ctx.fillStyle="rgba(255,255,255,0.55)"; ctx.font="7px Arial";
-    ctx.fillText(fmtDT(new Date(r.dateTime)),LP/2,yOff+152);
-    // copy label — bottom of left panel
-    ctx.fillStyle=RED; ctx.fillRect(0,yOff+HALF-22,LP,18);
-    ctx.fillStyle="#fff"; ctx.font="bold 8px Arial"; ctx.textAlign="center";
-    ctx.fillText(label,LP/2,yOff+HALF-10);
-    // bottom red stripe
-    ctx.fillStyle=RED; ctx.fillRect(0,yOff+HALF-4,LP,4);
+    // ── HEADER ──────────────────────────────────────────────────────────
+    var g=ctx.createLinearGradient(0,yOff,0,yOff+HDR);
+    g.addColorStop(0,NAVY);g.addColorStop(1,MID);
+    ctx.fillStyle=g;ctx.fillRect(0,yOff,W,HDR);
+    ctx.fillStyle=RED;ctx.fillRect(0,yOff,W,4);
 
-    // ── RIGHT PANEL — layout from top AND bottom, meeting in middle ─────────
-    // TOP section: route + sender/receiver + address + details = fixed height
-    // BOTTOM section: signatures = 34px pinned to bottom
-    // MIDDLE: terms fills remaining space
+    // Logo left
+    if(window.SKL_LOGO)ctx.drawImage(window.SKL_LOGO,6,yOff+4,110,46);
+    else{ctx.fillStyle="#fff";ctx.font="bold 13px Arial";ctx.textAlign="left";ctx.fillText("SK LOGISTICS",8,yOff+32);}
 
-    var SIG_H = 34;   // signature box height
-    var sigY  = yOff + HALF - SIG_H - 2; // 2px padding from bottom
+    // Company centre
+    ctx.fillStyle="#fff";ctx.font="bold 13px Arial";ctx.textAlign="center";
+    ctx.fillText("SK LOGISTICS",W/2,yOff+20);
+    ctx.fillStyle="rgba(255,255,255,0.78)";ctx.font="8.5px Arial";
+    ctx.fillText("Bahadurpura, Hyderabad \u2013 500064  |  Auth. DTDC & Rivigo Franchisee",W/2,yOff+34);
+    ctx.fillStyle="rgba(255,255,255,0.6)";ctx.font="8px Arial";
+    ctx.fillText("\u260E 8919855159 | 8886507472",W/2,yOff+48);
 
-    var ry = yOff + 4; // current y pointer from top
+    // Copy label right
+    ctx.fillStyle=RED;ctx.fillRect(W-130,yOff+12,124,20);
+    ctx.fillStyle="#fff";ctx.font="bold 8.5px Arial";ctx.textAlign="center";
+    ctx.fillText(label,W-68,yOff+25);
 
-    // Route bar — 30px
-    ctx.fillStyle=LGRAY; ctx.fillRect(RX,ry,RW,30);
-    ctx.strokeStyle=NAVY; ctx.lineWidth=0.8; ctx.setLineDash([]); ctx.strokeRect(RX,ry,RW,30);
-    ctx.fillStyle=RED; ctx.font="bold 10px Arial"; ctx.textAlign="left";
-    ctx.fillText("Hyderabad \u2013 500064",RX+6,ry+20);
-    ctx.fillStyle=RED; ctx.font="bold 16px Arial"; ctx.textAlign="center";
-    ctx.fillText("\u279C",RX+RW/2,ry+22);
-    ctx.fillStyle=NAVY; ctx.font="bold 10px Arial"; ctx.textAlign="right";
-    ctx.fillText(clip(r.destCity||"\u2014",17)+(r.destPin?" \u2013 "+r.destPin:""),RX+RW-6,ry+20);
-    ry+=33;
+    ctx.fillStyle=RED;ctx.fillRect(0,yOff+HDR-3,W,3);
 
-    // Sender / Receiver — 40px
-    var hw=Math.floor(RW/2)-3;
-    ctx.fillStyle=LGRAY; ctx.fillRect(RX,ry,hw,40);
-    ctx.strokeStyle=NAVY; ctx.lineWidth=0.8; ctx.strokeRect(RX,ry,hw,40);
-    ctx.fillStyle=RED; ctx.font="bold 8px Arial"; ctx.textAlign="left";
-    ctx.fillText("SENDER",RX+5,ry+11);
-    ctx.fillStyle=DARK; ctx.font="bold 11px Arial";
-    ctx.fillText(clip(r.senderName||"\u2014",20),RX+5,ry+24);
-    ctx.fillStyle=GRAY; ctx.font="9px Arial";
-    ctx.fillText(r.senderPhone||"",RX+5,ry+36);
-    var rx2=RX+hw+5;
-    ctx.fillStyle=LGRAY; ctx.fillRect(rx2,ry,hw,40);
-    ctx.strokeStyle=NAVY; ctx.lineWidth=0.8; ctx.strokeRect(rx2,ry,hw,40);
-    ctx.fillStyle=RED; ctx.font="bold 8px Arial";
-    ctx.fillText("RECEIVER",rx2+5,ry+11);
-    ctx.fillStyle=DARK; ctx.font="bold 11px Arial";
-    ctx.fillText(clip(r.receiverName||"\u2014",20),rx2+5,ry+24);
-    ctx.fillStyle=GRAY; ctx.font="9px Arial";
-    ctx.fillText(r.receiverPhone||"",rx2+5,ry+36);
-    ry+=44;
+    // ── AWB + BARCODE STRIP ──────────────────────────────────────────────
+    var ay=yOff+HDR;
+    ctx.fillStyle=LGRAY;ctx.fillRect(0,ay,W,AWB_H);
+    ctx.strokeStyle=NAVY;ctx.lineWidth=0.8;ctx.setLineDash([]);ctx.strokeRect(0,ay,W,AWB_H);
+    // AWB left
+    ctx.fillStyle=RED;ctx.font="bold 14px Arial";ctx.textAlign="left";
+    ctx.fillText(r.awb||"",8,ay+24);
+    // Barcode centre
+    if(r.awb)drawBCctx(ctx,r.awb,140,ay+2,420,28);
+    // Courier right
+    ctx.fillStyle=RED;ctx.fillRect(W-130,ay+4,124,14);
+    ctx.fillStyle="#fff";ctx.font="bold 8px Arial";ctx.textAlign="center";
+    ctx.fillText((r.courier||"DTDC")+" \u2022 "+(r.mode||""),W-68,ay+14);
+    ctx.fillStyle=GRAY;ctx.font="8px Arial";
+    ctx.fillText(fmtDT(new Date(r.dateTime)),W-68,ay+30);
 
-    // Delivery address — 24px (optional)
-    if(showAddr && deliveryAddr){
-      ctx.fillStyle="#fff"; ctx.fillRect(RX,ry,RW,24);
-      ctx.strokeStyle=NAVY; ctx.lineWidth=0.8; ctx.strokeRect(RX,ry,RW,24);
-      ctx.fillStyle=RED; ctx.font="bold 7.5px Arial"; ctx.textAlign="left";
-      ctx.fillText("DELIVERY:",RX+5,ry+9);
-      ctx.fillStyle=DARK; ctx.font="9px Arial";
-      ctx.fillText(clip(deliveryAddr,88),RX+58,ry+9);
-      ry+=27;
+    // ── ROUTE ──────────────────────────────────────────────────────────
+    ctx.fillStyle=LGRAY;ctx.fillRect(4,CY,CW,28);
+    ctx.strokeStyle=NAVY;ctx.lineWidth=0.8;ctx.setLineDash([]);ctx.strokeRect(4,CY,CW,28);
+    ctx.fillStyle=RED;ctx.font="bold 10px Arial";ctx.textAlign="left";
+    ctx.fillText("FROM: Hyderabad \u2013 500064",12,CY+19);
+    ctx.fillStyle=RED;ctx.font="bold 16px Arial";ctx.textAlign="center";ctx.fillText("\u279C",W/2,CY+20);
+    ctx.fillStyle=NAVY;ctx.font="bold 10px Arial";ctx.textAlign="right";
+    ctx.fillText("TO: "+clip(r.destCity||"\u2014",16)+(r.destPin?" \u2013 "+r.destPin:""),W-10,CY+19);
+    var ry=CY+31;
+
+    // ── SENDER / RECEIVER ──────────────────────────────────────────────
+    var hw=Math.floor(CW/2)-3;
+    ctx.fillStyle=LGRAY;ctx.fillRect(4,ry,hw,36);ctx.strokeStyle=NAVY;ctx.lineWidth=0.8;ctx.strokeRect(4,ry,hw,36);
+    ctx.fillStyle=RED;ctx.font="bold 8px Arial";ctx.textAlign="left";ctx.fillText("SENDER",10,ry+11);
+    ctx.fillStyle=DARK;ctx.font="bold 11px Arial";ctx.fillText(clip(r.senderName||"\u2014",22),10,ry+24);
+    ctx.fillStyle=GRAY;ctx.font="9px Arial";ctx.fillText(r.senderPhone||"",10,ry+33);
+    var rx2=4+hw+6;
+    ctx.fillStyle=LGRAY;ctx.fillRect(rx2,ry,hw,36);ctx.strokeStyle=NAVY;ctx.lineWidth=0.8;ctx.strokeRect(rx2,ry,hw,36);
+    ctx.fillStyle=RED;ctx.font="bold 8px Arial";ctx.fillText("RECEIVER",rx2+6,ry+11);
+    ctx.fillStyle=DARK;ctx.font="bold 11px Arial";ctx.fillText(clip(r.receiverName||"\u2014",22),rx2+6,ry+24);
+    ctx.fillStyle=GRAY;ctx.font="9px Arial";ctx.fillText(r.receiverPhone||"",rx2+6,ry+33);
+    ry+=40;
+
+    // ── DELIVERY ADDRESS ────────────────────────────────────────────────
+    if(showAddr&&deliveryAddr){
+      ctx.fillStyle="#fff";ctx.fillRect(4,ry,CW,22);ctx.strokeStyle=NAVY;ctx.lineWidth=0.8;ctx.strokeRect(4,ry,CW,22);
+      ctx.fillStyle=RED;ctx.font="bold 8px Arial";ctx.textAlign="left";ctx.fillText("DELIVERY:",10,ry+9);
+      ctx.fillStyle=DARK;ctx.font="9px Arial";ctx.fillText(clip(deliveryAddr,90),68,ry+16);
+      ry+=25;
     }
 
-    // Details grid — 30px
-    ctx.fillStyle=LGRAY; ctx.fillRect(RX,ry,RW,30);
-    ctx.strokeStyle=NAVY; ctx.lineWidth=0.8; ctx.strokeRect(RX,ry,RW,30);
-    var dW=RW/4;
-    var dl=["Weight","Pieces","Contents","Payment"];
-    var dv=[(r.weight||"0")+" kg",r.pieces||"1",r.contents||"",r.payment||""];
+    // ── DETAILS ────────────────────────────────────────────────────────
+    ctx.fillStyle=LGRAY;ctx.fillRect(4,ry,CW,28);ctx.strokeStyle=NAVY;ctx.lineWidth=0.8;ctx.strokeRect(4,ry,CW,28);
+    var dW=CW/4,dl=["Weight","Pieces","Contents","Payment"],dv=[(r.weight||"0")+" kg",r.pieces||"1",r.contents||"",r.payment||""];
     for(var i=0;i<4;i++){
-      if(i>0){
-        ctx.save();ctx.setLineDash([]);ctx.strokeStyle="#ddd";ctx.lineWidth=0.7;
-        ctx.beginPath();ctx.moveTo(RX+i*dW,ry);ctx.lineTo(RX+i*dW,ry+30);ctx.stroke();ctx.restore();
-      }
-      ctx.fillStyle=GRAY; ctx.font="7px Arial"; ctx.textAlign="center";
-      ctx.fillText(dl[i],RX+i*dW+dW/2,ry+10);
-      ctx.fillStyle=NAVY; ctx.font="bold 11px Arial";
-      ctx.fillText(dv[i],RX+i*dW+dW/2,ry+25);
+      if(i>0){ctx.save();ctx.setLineDash([]);ctx.strokeStyle="#ddd";ctx.lineWidth=0.7;ctx.beginPath();ctx.moveTo(4+i*dW,ry);ctx.lineTo(4+i*dW,ry+28);ctx.stroke();ctx.restore();}
+      ctx.fillStyle=GRAY;ctx.font="7.5px Arial";ctx.textAlign="center";ctx.fillText(dl[i],4+i*dW+dW/2,ry+10);
+      ctx.fillStyle=NAVY;ctx.font="bold 11px Arial";ctx.fillText(dv[i],4+i*dW+dW/2,ry+24);
     }
-    // Charges overlaid right
-    ctx.fillStyle=RED; ctx.font="bold 14px Arial"; ctx.textAlign="right";
-    ctx.fillText("\u20B9 "+(r.charges||"0"),RX+RW-4,ry+24);
-    ry+=33;
+    ctx.fillStyle=RED;ctx.font="bold 13px Arial";ctx.textAlign="right";
+    ctx.fillText("\u20B9 "+(r.charges||"0"),W-8,ry+23);
+    ry+=31;
 
-    // Terms & Conditions — fills gap between details and signatures
-    var termsH = sigY - ry - 3;
-    if(termsH > 12){
-      ctx.fillStyle="#fffde7"; ctx.fillRect(RX,ry,RW,termsH);
-      ctx.save();ctx.setLineDash([3,3]);ctx.strokeStyle=NAVY;ctx.lineWidth=0.7;
-      ctx.strokeRect(RX,ry,RW,termsH);ctx.restore();
-      ctx.fillStyle=RED; ctx.font="bold 7.5px Arial"; ctx.textAlign="center";
-      ctx.fillText("** TERMS & DECLARATION **",RX+RW/2,ry+10);
-      ctx.fillStyle=DARK; ctx.font="7.5px Arial"; ctx.textAlign="left";
+    // ── TERMS (fills remaining space) ──────────────────────────────────
+    var termsH=sigY-ry-3;
+    if(termsH>10){
+      ctx.fillStyle="#fffde7";ctx.fillRect(4,ry,CW,termsH);
+      ctx.save();ctx.setLineDash([3,3]);ctx.strokeStyle=NAVY;ctx.lineWidth=0.7;ctx.strokeRect(4,ry,CW,termsH);ctx.restore();
+      ctx.fillStyle=RED;ctx.font="bold 7.5px Arial";ctx.textAlign="center";
+      ctx.fillText("** TERMS & DECLARATION **",W/2,ry+10);
+      ctx.fillStyle=DARK;ctx.font="7.5px Arial";ctx.textAlign="left";
       var terms=[
-        "Consignor declares: No gold/silver/cash/jewellery or prohibited/dangerous goods in this shipment.",
-        "SK Logistics is a SERVICE PROVIDER / carrier agent only. Not liable for contents of shipment.",
-        "Max liability: Documents \u20B91,500 | Non-Documents \u20B92,500 (Owner Risk).",
-        "For higher coverage opt Carrier Risk at booking. Consignor responsible for accuracy of contents."
+        "No gold/silver/cash/jewellery or prohibited goods. SK Logistics: SERVICE PROVIDER only.",
+        "Max liability: Docs \u20B91,500 | Non-Docs \u20B92,500 (Owner Risk). Opt Carrier Risk for higher coverage.",
+        "Consignor is fully liable for accuracy of contents. Loss/damage limited to above amounts."
       ];
       for(var ti=0;ti<terms.length;ti++){
-        var ty=ry+18+ti*9;
-        if(ty+8<sigY) ctx.fillText(terms[ti],RX+5,ty);
+        var ty=ry+19+ti*9;
+        if(ty+8<sigY)ctx.fillText(terms[ti],8,ty);
       }
     }
 
-    // ── SIGNATURE BOXES — pinned exactly to bottom ──────────────────────────
-    var sigW=Math.floor(RW/3)-4;
+    // ── SIGNATURES — pinned to bottom ──────────────────────────────────
+    var sigW=Math.floor(CW/3)-4;
     function sig(x,y2,lbl){
       ctx.fillStyle="#fff";ctx.strokeStyle=NAVY;ctx.lineWidth=0.8;ctx.setLineDash([]);
       ctx.strokeRect(x,y2,sigW,SIG_H);
-      ctx.fillStyle=GRAY;ctx.font="8px Arial";ctx.textAlign="center";
-      ctx.fillText(lbl,x+sigW/2,y2+12);
-      ctx.save();ctx.setLineDash([3,3]);ctx.strokeStyle="#bbb";ctx.lineWidth=0.7;
+      ctx.fillStyle=GRAY;ctx.font="8px Arial";ctx.textAlign="center";ctx.fillText(lbl,x+sigW/2,y2+12);
+      ctx.save();ctx.setLineDash([3,3]);ctx.strokeStyle="#bbb";ctx.lineWidth=0.6;
       ctx.beginPath();ctx.moveTo(x+8,y2+26);ctx.lineTo(x+sigW-8,y2+26);ctx.stroke();ctx.restore();
-      ctx.fillStyle=GRAY;ctx.font="7px Arial";
-      ctx.fillText("Signature",x+sigW/2,y2+33);
+      ctx.fillStyle=GRAY;ctx.font="7px Arial";ctx.fillText("Signature",x+sigW/2,y2+32);
     }
-    sig(RX,              sigY, "Booking Executive");
-    sig(RX+sigW+6,       sigY, "Sender's Signature");
-    sig(RX+2*(sigW+6),   sigY, "Recipient's Signature");
+    sig(4,            sigY,"Booking Executive");
+    sig(4+sigW+6,     sigY,"Sender's Signature");
+    sig(4+2*(sigW+6), sigY,"Recipient's Signature");
 
-    ctx.restore(); // remove clip
+    ctx.restore();
   }
 
-  // Draw top half (Sender)
-  half("SENDER'S COPY", 0);
+  drawHalf("SENDER'S COPY",    0);
 
   // Red separator
   ctx.fillStyle=RED; ctx.fillRect(0,HALF,W,SEP);
-  // Dashed cut guide on right side
-  ctx.save();ctx.setLineDash([8,5]);ctx.strokeStyle="#999";ctx.lineWidth=0.8;
-  ctx.beginPath();ctx.moveTo(LP,HALF+SEP/2);ctx.lineTo(W,HALF+SEP/2);ctx.stroke();ctx.restore();
-  ctx.fillStyle="#888";ctx.font="13px Arial";ctx.textAlign="left";
-  ctx.fillText("\u2702",LP+6,HALF+SEP/2+5);
+  ctx.save();ctx.setLineDash([8,5]);ctx.strokeStyle="#aaa";ctx.lineWidth=0.8;
+  ctx.beginPath();ctx.moveTo(0,HALF+SEP/2);ctx.lineTo(W,HALF+SEP/2);ctx.stroke();ctx.restore();
+  ctx.fillStyle="#888";ctx.font="13px Arial";ctx.textAlign="right";ctx.fillText("\u2702",W-6,HALF+SEP/2+5);
 
-  // Draw bottom half (Recipient)
-  half("RECIPIENT'S COPY", HALF+SEP);
+  drawHalf("RECIPIENT'S COPY", HALF+SEP);
 
   return cv;
 }
